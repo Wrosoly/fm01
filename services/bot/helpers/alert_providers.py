@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import datetime
+import email.utils
 import logging
 import os
 import re
@@ -24,6 +25,27 @@ YT_NAMESPACES = {
 	"yt": "http://www.youtube.com/xml/schemas/2015",
 	"media": "http://search.yahoo.com/mrss/",
 }
+
+
+class FeedUnavailableError(Exception):
+	"""Raised when an RSS feed cannot be downloaded or parsed."""
+
+	def __init__(self, feed_url: str, reason: str) -> None:
+		super().__init__(f"{feed_url}: {reason}")
+		self.feed_url = feed_url
+		self.reason = reason
+
+
+def _parse_rss_date(raw: str) -> datetime.datetime | None:
+	"""Parses an RSS ``pubDate`` (RFC 822, as RSSHub emits) or ISO 8601 timestamp."""
+	try:
+		return email.utils.parsedate_to_datetime(raw)
+	except (TypeError, ValueError):
+		pass
+	try:
+		return datetime.datetime.fromisoformat(raw)
+	except ValueError:
+		return None
 
 
 class AlertProvider(abc.ABC):
@@ -387,6 +409,25 @@ class GenericRSSProvider(AlertProvider):
 			return env_url.rstrip("/")
 		return "https://rsshub.app"
 
+	async def _fetch_feed(self, session: aiohttp.ClientSession, account_id: str, bot: Bot | None) -> ET.Element:
+		"""Downloads and parses the account's RSS feed.
+
+		Raises:
+			FeedUnavailableError: The feed could not be downloaded or parsed.
+
+		"""
+		feed_url = f"{self._get_base_url(bot)}/{self.path_prefix}/{account_id}"
+		try:
+			async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+				if resp.status != 200:
+					raise FeedUnavailableError(feed_url, f"HTTP {resp.status}")
+				xml_text = await resp.text()
+			return ET.fromstring(xml_text)
+		except ET.ParseError as e:
+			raise FeedUnavailableError(feed_url, f"invalid XML ({e})") from e
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			raise FeedUnavailableError(feed_url, type(e).__name__) from e
+
 	async def resolve_channel(
 		self,
 		session: aiohttp.ClientSession,
@@ -397,6 +438,8 @@ class GenericRSSProvider(AlertProvider):
 		handle_match = re.search(r"(?:com|app)/(?:@|p/)?([^/?#]+)", cleaned)
 		candidate = handle_match.group(1) if handle_match else cleaned
 		candidate = candidate.lstrip("@")
+		# Fail on add rather than silently never alerting.
+		await self._fetch_feed(session, candidate, bot)
 		return candidate, candidate
 
 	async def fetch_latest(
@@ -406,17 +449,10 @@ class GenericRSSProvider(AlertProvider):
 		account_name: str | None = None,
 		bot: Bot | None = None,
 	) -> Media | None:
-		base_url = self._get_base_url(bot)
-		feed_url = f"{base_url}/{self.path_prefix}/{account_id}"
-
 		try:
-			async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-				if resp.status != 200:
-					return None
-				xml_text = await resp.text()
-				root = ET.fromstring(xml_text)
-		except (aiohttp.ClientError, ET.ParseError, TimeoutError, OSError) as e:
-			logger.debug(f"Error fetching feed from {feed_url}: {e}")
+			root = await self._fetch_feed(session, account_id, bot)
+		except FeedUnavailableError as e:
+			logger.warning(f"{self.display_name} feed unavailable for {account_id}: {e}")
 			return None
 
 		# Handle RSS 2.0 channel/item structure
@@ -452,10 +488,7 @@ class GenericRSSProvider(AlertProvider):
 
 		published_at: datetime.datetime | None = None
 		if pub_date_el is not None and pub_date_el.text:
-			try:
-				published_at = datetime.datetime.fromisoformat(pub_date_el.text)
-			except ValueError:
-				published_at = None
+			published_at = _parse_rss_date(pub_date_el.text)
 
 		desc_text = desc_el.text.strip() if desc_el is not None and desc_el.text else None
 		author_url = (

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from helpers.alert_providers import (
+	FeedUnavailableError,
 	InstagramProvider,
 	TikTokProvider,
 	TwitchProvider,
@@ -198,6 +199,56 @@ async def test_generic_rss_provider_tiktok_and_instagram():
 	assert media.author.name == "Popular Creator"
 	assert media.author.url == "https://www.{self.platform}.com/@creator".replace("{self.platform}", "tiktok")
 	assert media.platform == "tiktok"
+
+
+def _mock_session(status: int, text: str = "") -> MagicMock:
+	session = MagicMock()
+	resp = MagicMock()
+	resp.status = status
+	resp.text = AsyncMock(return_value=text)
+	session.get.return_value.__aenter__ = AsyncMock(return_value=resp)
+	session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+	return session
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_fetch_latest_logs_blocked_feed(caplog: pytest.LogCaptureFixture):
+	session = _mock_session(403, "Due to cost considerations ...")
+
+	with caplog.at_level("WARNING", logger="helpers.alert_providers"):
+		media = await InstagramProvider().fetch_latest(session, "creator")
+
+	assert media is None
+	assert "HTTP 403" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_resolve_channel_rejects_blocked_feed():
+	session = _mock_session(403)
+
+	with pytest.raises(FeedUnavailableError) as exc_info:
+		await InstagramProvider().resolve_channel(session, "https://www.instagram.com/creator/")
+
+	assert exc_info.value.reason == "HTTP 403"
+	assert exc_info.value.feed_url.endswith("/instagram/user/creator")
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_resolve_channel_accepts_reachable_feed():
+	session = _mock_session(200, RSS_SAMPLE_FEED)
+
+	assert await TikTokProvider().resolve_channel(session, "@creator") == ("creator", "creator")
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_parses_rfc822_pub_date():
+	feed = RSS_SAMPLE_FEED.replace("2026-11-01T12:00:00+00:00", "Sun, 01 Nov 2026 12:00:00 GMT")
+	session = _mock_session(200, feed)
+
+	media = await InstagramProvider().fetch_latest(session, "creator")
+
+	assert media is not None
+	assert media._published_at == datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.UTC)
 
 
 def test_get_provider_registry():

@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
-from helpers.alert_providers import SUPPORTED_PLATFORMS, get_provider
+from helpers.alert_providers import SUPPORTED_PLATFORMS, FeedUnavailableError, get_provider
 from helpers.cli_parser import CLINode, CLIParseError
 
 from .helpers import resolve_channel
@@ -85,6 +85,12 @@ def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
 
 		try:
 			account_id, account_name = await provider.resolve_channel(session, account, bot=ctx.bot)
+		except FeedUnavailableError as e:
+			raise CLIParseError(
+				f"Could not load the {provider.display_name} feed for `{account}` ({e.reason}). "
+				"Check the account name, and that the bot's RSSHub instance is configured for this platform.",
+				add_node,
+			) from e
 		finally:
 			if not alerts_cog or not hasattr(alerts_cog, "get_session"):
 				await session.close()
