@@ -113,7 +113,7 @@ class Moderation(commands.GroupCog, name="Moderation", group_name="mod"):
 
 		await ctx.send("mod.warn.response", warn=warn)
 
-	@command(user=False, permissions=["moderate_members"])
+	@command(user=False, permissions=["moderate_members"], aliases=["timeout"])
 	async def mute(self, ctx: Context, member: discord.Member, expires: str, *, reason: str | None = None):
 		assert ctx.guild is not None
 		try:
@@ -225,7 +225,7 @@ class Moderation(commands.GroupCog, name="Moderation", group_name="mod"):
 
 		await ctx.send("mod.unban.response", user=user)
 
-	@command(user=False, permissions=["manage_channels"], l10n_key="sm")
+	@command(user=False, permissions=["manage_channels"], l10n_key="sm", name="slowmode", aliases=["sm"])
 	async def slowmode(self, ctx: Context, duration: str | None = None, channel: discord.TextChannel | None = None):
 		target_channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
 		if not target_channel:
@@ -260,7 +260,7 @@ class Cases(commands.Cog, name="Cases"):
 		self.custom_response = custom_response.CustomResponse(client, "mod")
 		self.cases = cases
 
-	@group(user=False, l10n_key="caseinfo", name="case")
+	@group(user=False, l10n_key="caseinfo", name="case", aliases=["caseinfo"])
 	async def case(self, ctx: Context, case_id: str):
 		assert ctx.guild is not None
 		assert isinstance(ctx.author, discord.Member)
@@ -279,7 +279,12 @@ class Cases(commands.Cog, name="Cases"):
 
 		await ctx.send("mod.info.response", case=case)
 
-	@case.command(user=False, permissions=["moderate_members"], l10n_key="casedel")
+	@case.command(
+		user=False,
+		permissions=["moderate_members"],
+		l10n_key="casedel",
+		full_aliases=["casedel", "delcase", "deletecase", "casedelete", "cd"],
+	)
 	async def delete(self, ctx: Context, case_id: str):
 		assert ctx.guild is not None
 		fetched_case_id = _parse_case_id(case_id)
@@ -291,7 +296,12 @@ class Cases(commands.Cog, name="Cases"):
 		await self.cases.delete(case)
 		await ctx.send("mod.delete.response", case=case)
 
-	@case.command(user=False, permissions=["moderate_members"], l10n_key="caserem")
+	@case.command(
+		user=False,
+		permissions=["moderate_members"],
+		l10n_key="caserem",
+		full_aliases=["caserem", "remcase", "removecase", "caseremove", "cr"],
+	)
 	async def remove(self, ctx: Context, case_id: str):
 		assert ctx.guild is not None
 		fetched_case_id = _parse_case_id(case_id)
@@ -303,7 +313,12 @@ class Cases(commands.Cog, name="Cases"):
 		outcome = await self.cases.close(case)
 		await ctx.send("mod.delete.response" if outcome == "deleted" else "mod.remove.response", case=case)
 
-	@case.command(user=False, permissions=["moderate_members"], l10n_key="caseedit")
+	@case.command(
+		user=False,
+		permissions=["moderate_members"],
+		l10n_key="caseedit",
+		full_aliases=["caseedit", "editcase", "casemod", "modcase", "ce"],
+	)
 	@app_commands.choices(
 		value=[
 			app_commands.Choice(name="caseedit-args-value-expires", value="expires"),
@@ -335,7 +350,7 @@ class Cases(commands.Cog, name="Cases"):
 
 		await ctx.send("mod.edit.response", case=case)
 
-	@case.command(user=False, l10n_key="caselist")
+	@case.command(user=False, l10n_key="caselist", full_aliases=["cl", "caselist", "cases", "listcase", "listcases"])
 	@app_commands.choices(
 		filter=[
 			app_commands.Choice(name="caselist-args-filter-active", value="active"),

@@ -206,18 +206,97 @@ class HybridCommand(_CommandOptions, commands.HybridCommand):
 		user: bool = True,
 		guild: bool = True,
 		usage: str | None = None,
+		full_aliases: list[str] | None = None,
 		**kwargs: Any,
 	):
 		base = l10n_key or name or getattr(func, "__name__", None)
 		super().__init__(func, name=name, description=description, usage=usage, **kwargs)
 		self._apply_options(base, permissions, l10n_key, user, guild)
+		self.full_aliases = full_aliases or []
 
 		if self.with_app_command:
 			self.app_command = HybridAppCommand(self)
 			self._apply_installs(self.app_command)
 
+	@property
+	def default_full_alias(self) -> str | None:
+		"""The full alias every subcommand gets: its qualified name without spaces (``caselist`` for ``case list``)."""
+		return self.qualified_name.replace(" ", "") if self.parent is not None else None
+
+	@property
+	def all_full_aliases(self) -> list[str]:
+		"""``full_aliases`` followed by `default_full_alias`, without duplicates."""
+		names = [*self.full_aliases, self.default_full_alias] if self.default_full_alias else self.full_aliases
+		return list(dict.fromkeys(names))
+
 	def _ensure_assignment_on_copy(self, other: Self) -> Self:
 		return self._copy_options(super()._ensure_assignment_on_copy(other))
+
+
+class FullAliasCommand(HybridCommand):
+	"""A text-only, top-level command that runs a subcommand without going through its groups.
+
+	Registered by `Bot.add_command` for every name in a subcommand's `all_full_aliases`. The groups' callbacks are
+	skipped, but their checks still run, so an alias never grants more access than the subcommand itself. The cog,
+	cooldowns and concurrency limits are the target's, not copies.
+	"""
+
+	def __init__(self, target: HybridCommand, name: str, implicit: bool = False) -> None:
+		super().__init__(
+			target.callback,
+			name=name,
+			description=target.description,
+			l10n_key=target.l10n_key,
+			usage=target.usage,
+			help=target.help,
+			brief=target.brief,
+			hidden=True,
+			enabled=target.enabled,
+			rest_is_raw=target.rest_is_raw,
+			ignore_extra=target.ignore_extra,
+			require_var_positional=target.require_var_positional,
+			cooldown_after_parsing=target.cooldown_after_parsing,
+			with_app_command=False,
+		)
+		self.target = target
+		# Only the default alias: it yields to any real command of the same name instead of failing registration.
+		self.implicit = implicit
+		target._copy_options(self)
+		self.checks = [check for parent in reversed(target.parents) for check in parent.checks] + target.checks
+		self._buckets = target._buckets
+		self._max_concurrency = target._max_concurrency
+		self._before_invoke = target._before_invoke
+		self._after_invoke = target._after_invoke
+		self.extras = target.extras
+		if target.has_error_handler():
+			self.on_error = target.on_error
+
+	@property
+	def cog(self) -> Any:
+		# Read through: the target's cog is assigned after the alias is built, and changes on reload.
+		return self.target.cog
+
+	@cog.setter
+	def cog(self, value: Any) -> None:
+		pass
+
+
+def full_alias_commands(command: commands.Command) -> list[FullAliasCommand]:
+	"""Build the top-level aliases of ``command`` and its subcommands (see `HybridCommand.all_full_aliases`).
+
+	Args:
+		command: A top-level command or group.
+
+	Returns:
+		One `FullAliasCommand` per alias; the default ones are marked ``implicit``.
+	"""
+	subcommands = list(command.walk_commands()) if isinstance(command, commands.Group) else []
+	return [
+		FullAliasCommand(sub, alias, implicit=alias not in sub.full_aliases)
+		for sub in (command, *subcommands)
+		if isinstance(sub, HybridCommand)
+		for alias in sub.all_full_aliases
+	]
 
 
 class HybridGroup(_CommandOptions, commands.HybridGroup):
@@ -245,6 +324,10 @@ class HybridGroup(_CommandOptions, commands.HybridGroup):
 		else:
 			resolved_fallback = None
 
+		if resolved_fallback and isinstance(name, str) and kwargs.get("parent") is None:
+			# Text counterpart of the slash fallback: "caseinfo" for /case info.
+			kwargs["aliases"] = list(dict.fromkeys([*kwargs.get("aliases", []), f"{name}{resolved_fallback}"]))
+
 		super().__init__(func, name=name, description=description, fallback=resolved_fallback, usage=usage, **kwargs)
 		self._apply_options(base, permissions, l10n_key, user, guild)
 
@@ -269,8 +352,16 @@ class HybridGroup(_CommandOptions, commands.HybridGroup):
 		with_app_command: bool = True,
 		user: bool = True,
 		guild: bool = True,
+		full_aliases: list[str] | None = None,
 		**kwargs: Any,
 	) -> Callable[[CommandCallback], Any]:
+		"""Register a subcommand.
+
+		Args:
+			full_aliases: Text-only names that run the subcommand directly, without its group's prefix
+				(e.g. ``cases`` for ``case list``).
+		"""
+
 		def decorator(func: CommandCallback):
 			kwargs.setdefault("parent", self)
 			result = command(
@@ -281,6 +372,7 @@ class HybridGroup(_CommandOptions, commands.HybridGroup):
 				user=user,
 				guild=guild,
 				with_app_command=with_app_command,
+				full_aliases=full_aliases,
 				**kwargs,
 			)(func)
 			self.add_command(result)
@@ -348,6 +440,7 @@ def group(
 	l10n_key: str | None = None,
 	user: bool = True,
 	guild: bool = True,
+	aliases: list[str] | None = None,
 	usage: str | None = None,
 	**kwargs: Any,
 ) -> Callable[[Callable[..., Any]], HybridGroup]:
@@ -372,6 +465,7 @@ def group(
 			l10n_key=base,
 			user=user,
 			guild=guild,
+			aliases=aliases or [],
 			usage=usage,
 			**kwargs,
 		)

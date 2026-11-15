@@ -311,7 +311,7 @@ class Snapshot(commands.Cog, name="Snapshots"):
 				except (discord.Forbidden, discord.HTTPException):
 					continue
 
-	@group(permissions=["administrator"], user=False)
+	@group(permissions=["administrator"], user=False, aliases=["ss", "save", "backup"])
 	async def snapshot(self, ctx: Context):
 		assert ctx.guild is not None
 		await ctx.defer()  # slow: reads every role and channel
@@ -319,7 +319,9 @@ class Snapshot(commands.Cog, name="Snapshots"):
 
 		await ctx.send("snapshot.create", code=code)
 
-	@snapshot.command(l10n_key="ss_load", permissions=["administrator"])
+	@snapshot.command(
+		l10n_key="ss_load", permissions=["administrator"], full_aliases=["restore", "ssload", "ssrestore"]
+	)
 	async def load(self, ctx: Context, code: str):
 		assert ctx.guild is not None
 		await ctx.defer()  # slow: recreates roles and channels

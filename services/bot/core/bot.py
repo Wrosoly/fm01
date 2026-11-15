@@ -41,6 +41,7 @@ from core.clustering import (
 	fetch_proxy_shard_count,
 )
 from core.config import Config
+from core.hybrid import FullAliasCommand, full_alias_commands
 from core.settings import (
 	GuildSetting,
 	GuildSettings,
@@ -171,6 +172,50 @@ class Bot(commands.AutoShardedBot):
 
 	async def get_context(self, origin: discord.Message | discord.Interaction, /, *, cls=None) -> Any:
 		return await super().get_context(origin, cls=Context)
+
+	def add_command(self, command: commands.Command[Any, ..., Any], /) -> None:
+		"""Add a command, plus a top-level `FullAliasCommand` for each full alias in its tree.
+
+		Default (``implicit``) full aliases yield: they are skipped when their name is taken, and evicted when a real
+		command or an explicit full alias claims it. Any other name conflict raises `commands.CommandRegistrationError`.
+		"""
+		evicted = [self._evict_implicit_alias(name) for name in (command.name, *command.aliases)]
+		added: list[str] = []
+		try:
+			super().add_command(command)
+			added.append(command.name)
+			for alias in full_alias_commands(command):
+				if alias.implicit and alias.name in self.all_commands:
+					continue
+				evicted.append(self._evict_implicit_alias(alias.name))
+				super().add_command(alias)
+				added.append(alias.name)
+		except Exception:
+			for name in reversed(added):
+				super().remove_command(name)
+			for alias in evicted:
+				if alias is not None and alias.name not in self.all_commands:
+					super().add_command(alias)
+			raise
+
+	def _evict_implicit_alias(self, name: str) -> FullAliasCommand | None:
+		existing = self.all_commands.get(name)
+		if isinstance(existing, FullAliasCommand) and existing.implicit:
+			super().remove_command(name)
+			return existing
+		return None
+
+	def remove_command(self, name: str, /) -> commands.Command[Any, ..., Any] | None:
+		"""Remove a command, along with the full aliases registered for it and its subcommands."""
+		removed = super().remove_command(name)
+		if removed is None or removed.name != name or isinstance(removed, FullAliasCommand):
+			# Removed by a regular alias (the command stays registered) or a full alias on its own.
+			return removed
+		targets = {removed, *(removed.walk_commands() if isinstance(removed, commands.Group) else ())}
+		for alias_name, alias in list(self.all_commands.items()):
+			if isinstance(alias, FullAliasCommand) and alias.target in targets:
+				super().remove_command(alias_name)
+		return removed
 
 	async def setup_hook(self):
 		self.logger.info("Running initial setup hook...")
