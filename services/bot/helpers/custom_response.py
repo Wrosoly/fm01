@@ -33,9 +33,12 @@ from discord.ext import commands, localization
 if TYPE_CHECKING:
 	from core.bot import Bot
 
-__all__ = ("DEFAULT_COLOR", "DEFAULT_EMBED_COLOR", "CustomResponse")
+__all__ = ("DEFAULT_COLOR", "DEFAULT_EMBED_COLOR", "LOCALIZATION_ROOT", "RESPONSES_PATH", "CustomResponse")
 
 logger = logging.getLogger(__name__)
+
+LOCALIZATION_ROOT = Path(__file__).resolve().parent.parent.parent.parent / "shared" / "localization"
+RESPONSES_PATH = LOCALIZATION_ROOT / "responses"
 
 DEFAULT_COLOR = 0x6094EB
 DEFAULT_EMBED_COLOR = DEFAULT_COLOR
@@ -496,8 +499,7 @@ class CustomResponse:
 		elif isinstance(data_or_path, str):
 			self.load_localizations(data_or_path)
 
-	def load_localizations(self, path: str | None = None):
-		path: str | Path = path or Path(__file__).resolve().parent.parent.parent.parent / "shared" / "localization"
+	def load_localizations(self, path: str | Path = RESPONSES_PATH):
 		localization_path = pathlib.Path(path)
 		for file_path in localization_path.glob("*.l10n.json"):
 			lang = file_path.stem.removesuffix(".l10n")

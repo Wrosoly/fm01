@@ -1,4 +1,5 @@
 from logging import getLogger
+from pathlib import Path
 from time import perf_counter
 from typing import Literal
 
@@ -6,6 +7,7 @@ import discord
 from core import Bot, Context, command, update_slash_localizations
 from discord import app_commands
 from discord.ext import commands
+from helpers.custom_response import LOCALIZATION_ROOT, RESPONSES_PATH
 
 logger = getLogger(__name__)
 
@@ -67,17 +69,16 @@ class Admin(commands.GroupCog, name="admin"):
 
 	@command(hidden=True)
 	@commands.is_owner()
-	async def l10nreload(self, ctx: Context, path: str = "/shared/localization"):
-		from pathlib import Path
-
+	async def l10nreload(self, ctx: Context, path: str = str(RESPONSES_PATH)):
 		target_path = Path(path).resolve()
+		root = LOCALIZATION_ROOT.resolve()
+		if target_path != root and root not in target_path.parents:
+			await ctx.reply(content=f"⚠️ Access denied: path must be within {root}.")
+			return
 
-		ctx.bot.custom_response.load_localizations(str(target_path))
-		try:
-			await ctx.reply(content="Reloaded localization files.")
-			logger.info(f"{ctx.author.name} reloaded localization files from {target_path}.")
-		except Exception as e:
-			await ctx.reply(content=f"Failed to reload localization files: {e}")
+		ctx.bot.custom_response.load_localizations(target_path)
+		await ctx.reply(content="Reloaded localization files.")
+		logger.info(f"{ctx.author.name} reloaded localization files from {target_path}.")
 
 	@command(hidden=True)
 	@commands.is_owner()
