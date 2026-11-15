@@ -6,7 +6,8 @@ from typing import Any
 
 import discord
 import emoji
-from core import Bot, Command, Context, resolve_locale, slash_localization
+from core import Bot, Command, Context, format_aliases, resolve_locale, slash_localization
+from core.hybrid import FullAliasCommand
 from discord.ext import commands
 from discord.ext.localization import Localization
 from helpers import CustomResponse
@@ -82,7 +83,7 @@ class HelpLayoutView(discord.ui.LayoutView):
 
 
 class HelpCommand(commands.HelpCommand):
-	context: Context  # ty: ignore[invalid-mutable-override]
+	context: Context  # ty: ignore[incompatible-mutable-override]
 	custom_response: CustomResponse
 
 	def __init__(self) -> None:
@@ -289,7 +290,7 @@ class HelpCommand(commands.HelpCommand):
 			description=command.description or command.help or "-",
 			usage=f"{self.context.clean_prefix}{command.qualified_name}",
 			prefix=self.context.clean_prefix,
-			aliases=", ".join(command.aliases) if command.aliases else None,
+			aliases=format_aliases(command),
 		)
 
 	async def get_localized_string(self, key: str, fallback: str) -> str:
@@ -601,6 +602,8 @@ class HelpCommand(commands.HelpCommand):
 			view.message = msg
 
 	async def send_command_help(self, command: commands.Command[Any, ..., Any], /) -> None:
+		if isinstance(command, FullAliasCommand):
+			command = command.target
 		if (command.cog_name and command.cog_name.lower() == "jishaku") or command.name.lower() in ("jishaku", "jsk"):
 			string = await discord.utils.maybe_coroutine(self.command_not_found, command.name)
 			return await self.send_error_message(string)

@@ -48,7 +48,7 @@ class Info(commands.Cog, name="Information"):
 		else:
 			raise commands.BadArgument
 
-	@info.command(l10n_key="userinfo")
+	@info.command(l10n_key="userinfo", full_aliases=["ui", "userinfo", "user", "memberinfo", "member", "infomember"])
 	async def user(self, ctx: Context, user: discord.Member | discord.User | None = None):
 		user = user or ctx.author
 
@@ -69,7 +69,11 @@ class Info(commands.Cog, name="Information"):
 				pass
 		await ctx.send("info.user.not_member", member=User.from_user(user))
 
-	@info.command(user=False, l10n_key="serverinfo")
+	@info.command(
+		user=False,
+		l10n_key="serverinfo",
+		full_aliases=["serverinfo", "server", "guildinfo", "guild", "si", "infoguild"],
+	)
 	async def server(self, ctx: Context):
 		assert ctx.guild is not None
 		await ctx.send("info.server", server=Guild.from_guild(ctx.guild))
@@ -81,7 +85,7 @@ class Info(commands.Cog, name="Information"):
 			raise commands.BadArgument("role")
 		await ctx.send("info.role", role=Role.from_role(role))
 
-	@info.command(user=False, l10n_key="ipinfo")
+	@info.command(user=False, l10n_key="ipinfo", full_aliases=["ipinfo", "ip"])
 	async def ip(self, ctx: Context, ip_addr: str):
 		await ctx.defer()  # slow: calls ipinfo.io
 		try:
@@ -91,11 +95,11 @@ class Info(commands.Cog, name="Information"):
 		ip = IPAddress(ip_json)
 		await ctx.send("info.ip", ip=ip)
 
-	@info.command(l10n_key="botinfo")
+	@info.command(l10n_key="botinfo", full_aliases=["botinfo", "bot"])
 	async def bot(self, ctx: Context):
 		await ctx.send("info.bot", bot=BotArg(self.client))
 
-	@info.command(l10n_key="emojiinfo")
+	@info.command(l10n_key="emojiinfo", full_aliases=["emojiinfo", "einfo", "emoji"])
 	async def emoji(self, ctx: Context, emoji_name: str):
 		try:
 			emoji = await commands.EmojiConverter().convert(ctx, emoji_name)
@@ -108,7 +112,7 @@ class Info(commands.Cog, name="Information"):
 		else:
 			raise commands.BadArgument("emoji")
 
-	@info.command(user=False, l10n_key="chinfo")
+	@info.command(user=False, l10n_key="chinfo", full_aliases=["chinfo", "channelinfo", "channel"])
 	async def channel(self, ctx: Context, channel: discord.abc.GuildChannel):
 		if isinstance(channel, discord.TextChannel):
 			await ctx.send("info.channel.text", channel=TextChannel.from_channel(channel))

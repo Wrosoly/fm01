@@ -8,7 +8,20 @@ from core.locale import resolve_locale
 
 logger = logging.getLogger(__name__)
 
-__all__ = ("Command",)
+__all__ = ("Command", "format_aliases")
+
+
+def format_aliases(command: commands.Command) -> str | None:
+	"""Join ``command``'s aliases and full aliases (top-level names for a subcommand) for display.
+
+	Args:
+		command: The command to describe.
+
+	Returns:
+		A comma-separated list, or None when the command has no aliases of either kind.
+	"""
+	aliases = list(dict.fromkeys([*command.aliases, *getattr(command, "all_full_aliases", [])]))
+	return ", ".join(aliases) if aliases else None
 
 
 @dataclass
@@ -45,5 +58,5 @@ class Command:
 			description=description if isinstance(description, str) and description else "-",
 			usage=usage_text,
 			prefix=ctx.clean_prefix,
-			aliases=", ".join(command.aliases) if command.aliases else None,
+			aliases=format_aliases(command),
 		)

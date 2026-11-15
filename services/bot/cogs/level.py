@@ -349,7 +349,7 @@ class Level(commands.Cog, name="Level"):
 		)
 		await self.overrides.changed(guild_id)
 
-	@command(name="level", aliases=["rank"], user=False)
+	@command(name="level", aliases=["rank", "xp", "lvl"], user=False)
 	async def level_command(self, ctx: Context, member: discord.Member | None = None) -> None:
 		if not ctx.guild:
 			return
@@ -388,7 +388,7 @@ class Level(commands.Cog, name="Level"):
 		file = discord.File(card_buffer, filename=f"level_{target.id}.png")
 		await ctx.send(file=file)
 
-	@command(name="levels", aliases=["top"], user=False)
+	@command(name="levels", aliases=["top", "lvlleaderboard", "lvls"], user=False)
 	async def levels_command(self, ctx: Context, page: int = 1) -> None:
 		if not ctx.guild:
 			return
@@ -553,11 +553,7 @@ class Level(commands.Cog, name="Level"):
 
 	@commands.Cog.listener("on_message")
 	async def on_message_xp(self, message: discord.Message) -> None:
-		"""Award XP to members on message send with cooldowns and multipliers.
-
-		Args:
-			message: Discord message event.
-		"""
+		"""Award XP to members on message send with cooldowns and multipliers."""
 		if message.author.bot or not message.guild or not isinstance(message.author, discord.Member):
 			return
 
@@ -634,9 +630,4 @@ class Level(commands.Cog, name="Level"):
 
 
 async def setup(client: Bot):
-	"""Load Level cog extension into the bot.
-
-	Args:
-		client: The main bot instance.
-	"""
 	await client.add_cog(Level(client))
