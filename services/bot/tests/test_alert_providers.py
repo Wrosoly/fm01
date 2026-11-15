@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from helpers.alert_providers import (
+	AccountNotFoundError,
+	AlertSourceError,
 	FeedUnavailableError,
+	ProviderNotConfiguredError,
 	TikTokProvider,
 	TwitchProvider,
 	YouTubeProvider,
@@ -298,3 +301,55 @@ def test_get_provider_registry():
 	assert isinstance(get_provider("tiktok"), TikTokProvider)
 	assert get_provider("instagram") is None
 	assert get_provider("unknown_platform") is None
+
+
+@pytest.mark.asyncio
+async def test_twitch_resolve_without_credentials_raises(monkeypatch: pytest.MonkeyPatch):
+	monkeypatch.delenv("TWITCH_CLIENT_ID", raising=False)
+	monkeypatch.delenv("TWITCH_CLIENT_SECRET", raising=False)
+	session = MagicMock()
+
+	with pytest.raises(ProviderNotConfiguredError):
+		await TwitchProvider().resolve_channel(session, "playhubstreams")
+	session.get.assert_not_called()
+
+
+def _twitch_with_token(monkeypatch: pytest.MonkeyPatch) -> TwitchProvider:
+	monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+	monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+	provider = TwitchProvider()
+	provider._access_token = "token"
+	provider._token_expires_at = datetime.datetime.now(datetime.UTC).timestamp() + 3600
+	return provider
+
+
+@pytest.mark.asyncio
+async def test_twitch_resolve_unknown_user_raises(monkeypatch: pytest.MonkeyPatch):
+	provider = _twitch_with_token(monkeypatch)
+	session = _mock_session(200)
+	session.get.return_value.__aenter__.return_value.json = AsyncMock(return_value={"data": []})
+
+	with pytest.raises(AccountNotFoundError):
+		await provider.resolve_channel(session, "https://twitch.tv/NoSuchUser")
+
+
+@pytest.mark.asyncio
+async def test_twitch_resolve_returns_user_id(monkeypatch: pytest.MonkeyPatch):
+	provider = _twitch_with_token(monkeypatch)
+	session = _mock_session(200)
+	session.get.return_value.__aenter__.return_value.json = AsyncMock(
+		return_value={"data": [{"id": "123", "display_name": "PlayHubStreams"}]}
+	)
+
+	assert await provider.resolve_channel(session, "@PlayHubStreams") == ("123", "PlayHubStreams")
+	assert session.get.call_args.args[0].endswith("users?login=playhubstreams")
+
+
+@pytest.mark.asyncio
+async def test_twitch_fetch_api_error_raises_and_drops_token_on_401(monkeypatch: pytest.MonkeyPatch):
+	provider = _twitch_with_token(monkeypatch)
+	session = _mock_session(401)
+
+	with pytest.raises(AlertSourceError, match="HTTP 401"):
+		await provider.fetch_latest(session, "123")
+	assert provider._access_token is None

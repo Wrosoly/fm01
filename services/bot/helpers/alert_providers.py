@@ -28,13 +28,31 @@ YT_NAMESPACES = {
 }
 
 
-class FeedUnavailableError(Exception):
+class AlertSourceError(Exception):
+	"""Raised when a platform cannot be queried for an account."""
+
+	def __init__(self, reason: str) -> None:
+		super().__init__(reason)
+		self.reason = reason
+
+
+class FeedUnavailableError(AlertSourceError):
 	"""Raised when an RSS feed cannot be downloaded or parsed."""
 
 	def __init__(self, feed_url: str, reason: str) -> None:
-		super().__init__(f"{feed_url}: {reason}")
+		super().__init__(reason)
 		self.feed_url = feed_url
-		self.reason = reason
+
+	def __str__(self) -> str:
+		return f"{self.feed_url}: {self.reason}"
+
+
+class ProviderNotConfiguredError(AlertSourceError):
+	"""Raised when a platform needs credentials that the bot was not given."""
+
+
+class AccountNotFoundError(AlertSourceError):
+	"""Raised when the platform reports that the account does not exist."""
 
 
 class _FeedHTMLParser(HTMLParser):
@@ -85,6 +103,8 @@ class AlertProvider(abc.ABC):
 
 	platform: str
 	display_name: str
+	# Live-only platforms report "nothing" while the account is offline, which is a valid baseline.
+	live_only: bool = False
 
 	@abc.abstractmethod
 	async def resolve_channel(
@@ -102,6 +122,9 @@ class AlertProvider(abc.ABC):
 
 		Returns:
 			tuple[str, str]: (account_id, account_name)
+
+		Raises:
+			AlertSourceError: The account cannot be verified, so alerts for it would never fire.
 
 		"""
 		...
@@ -294,14 +317,18 @@ class TwitchProvider(AlertProvider):
 		self._access_token: str | None = None
 		self._token_expires_at: float = 0.0
 
-	@staticmethod
-	def _get_credentials() -> tuple[str | None, str | None]:
-		return os.getenv("TWITCH_CLIENT_ID"), os.getenv("TWITCH_CLIENT_SECRET")
+	live_only = True
 
-	async def _get_app_token(self, session: aiohttp.ClientSession) -> str | None:
-		client_id, client_secret = self._get_credentials()
+	@staticmethod
+	def _get_credentials() -> tuple[str, str]:
+		client_id = os.getenv("TWITCH_CLIENT_ID")
+		client_secret = os.getenv("TWITCH_CLIENT_SECRET")
 		if not client_id or not client_secret:
-			return None
+			raise ProviderNotConfiguredError("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are not set")
+		return client_id, client_secret
+
+	async def _get_app_token(self, session: aiohttp.ClientSession) -> str:
+		client_id, client_secret = self._get_credentials()
 
 		now = datetime.datetime.now(datetime.UTC).timestamp()
 		if self._access_token and now < (self._token_expires_at - 60):
@@ -315,16 +342,37 @@ class TwitchProvider(AlertProvider):
 		}
 		try:
 			async with session.post(token_url, params=params, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-				if resp.status == 200:
-					data = await resp.json()
-					self._access_token = data.get("access_token")
-					expires_in = data.get("expires_in", 3600)
-					self._token_expires_at = now + float(expires_in)
-					return self._access_token
-				logger.warning(f"Failed to obtain Twitch OAuth token: HTTP {resp.status}")
+				if resp.status != 200:
+					raise AlertSourceError(f"Twitch OAuth token request failed: HTTP {resp.status}")
+				data = await resp.json()
 		except (aiohttp.ClientError, TimeoutError, OSError) as e:
-			logger.warning(f"Error fetching Twitch token: {e}")
-		return None
+			raise AlertSourceError(f"Twitch OAuth token request failed: {type(e).__name__}") from e
+
+		token = data.get("access_token")
+		if not token:
+			raise AlertSourceError("Twitch OAuth token response had no access_token")
+		self._access_token = token
+		self._token_expires_at = now + float(data.get("expires_in", 3600))
+		return token
+
+	async def _helix_get(self, session: aiohttp.ClientSession, path: str) -> list[dict[str, Any]]:
+		"""Calls a Helix endpoint and returns its ``data`` list."""
+		client_id, _ = self._get_credentials()
+		token = await self._get_app_token(session)
+		headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
+		try:
+			async with session.get(
+				f"https://api.twitch.tv/helix/{path}", headers=headers, timeout=aiohttp.ClientTimeout(total=8)
+			) as resp:
+				if resp.status == 401:
+					# Token revoked or expired early: fetch a new one next time.
+					self._access_token = None
+				if resp.status != 200:
+					raise AlertSourceError(f"Twitch API returned HTTP {resp.status}")
+				res = await resp.json()
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			raise AlertSourceError(f"Twitch API request failed: {type(e).__name__}") from e
+		return res.get("data", [])
 
 	async def resolve_channel(
 		self,
@@ -336,22 +384,10 @@ class TwitchProvider(AlertProvider):
 		url_match = re.search(r"twitch\.tv/([^/?#]+)", cleaned)
 		login = (url_match.group(1) if url_match else cleaned).lstrip("@").lower()
 
-		token = await self._get_app_token(session)
-		client_id, _ = self._get_credentials()
-		if token and client_id:
-			headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
-			try:
-				url = f"https://api.twitch.tv/helix/users?login={login}"
-				async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-					if resp.status == 200:
-						data = await resp.json()
-						users = data.get("data", [])
-						if users:
-							return users[0]["id"], users[0]["display_name"]
-			except (aiohttp.ClientError, TimeoutError, OSError) as e:
-				logger.debug(f"Twitch user lookup error for {login}: {e}")
-
-		return login, login
+		users = await self._helix_get(session, f"users?login={login}")
+		if not users:
+			raise AccountNotFoundError(f"no Twitch user named {login}")
+		return users[0]["id"], users[0]["display_name"]
 
 	async def fetch_latest(
 		self,
@@ -360,27 +396,15 @@ class TwitchProvider(AlertProvider):
 		account_name: str | None = None,
 		bot: Bot | None = None,
 	) -> Media | None:
-		token = await self._get_app_token(session)
-		client_id, _ = self._get_credentials()
-		if not token or not client_id:
-			logger.debug("Twitch credentials not configured, skipping Twitch stream check.")
-			return None
+		"""Returns the current stream, or ``None`` while offline.
 
-		headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
+		Raises:
+			AlertSourceError: Twitch could not be queried, so the offline state is unknown.
+
+		"""
 		# account_id could be numeric user_id or login name
 		param_key = "user_id" if account_id.isdigit() else "user_login"
-		url = f"https://api.twitch.tv/helix/streams?{param_key}={account_id.lower()}"
-
-		try:
-			async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-				if resp.status != 200:
-					logger.debug(f"Twitch streams API returned {resp.status} for {account_id}")
-					return None
-				res = await resp.json()
-				data: list[dict[str, Any]] = res.get("data", [])
-		except (aiohttp.ClientError, TimeoutError, OSError) as e:
-			logger.debug(f"Error fetching Twitch streams for {account_id}: {e}")
-			return None
+		data = await self._helix_get(session, f"streams?{param_key}={account_id.lower()}")
 
 		if not data:
 			return None

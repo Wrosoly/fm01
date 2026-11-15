@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
-from helpers.alert_providers import SUPPORTED_PLATFORMS, FeedUnavailableError, get_provider
+from helpers.alert_providers import (
+	SUPPORTED_PLATFORMS,
+	AccountNotFoundError,
+	AlertSourceError,
+	FeedUnavailableError,
+	ProviderNotConfiguredError,
+	get_provider,
+)
 from helpers.cli_parser import CLINode, CLIParseError
 
 from .helpers import resolve_channel
 
 if TYPE_CHECKING:
 	from core import Context
+
+logger = logging.getLogger(__name__)
 
 
 def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
@@ -85,10 +95,20 @@ def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
 
 		try:
 			account_id, account_name = await provider.resolve_channel(session, account, bot=ctx.bot)
+		except ProviderNotConfiguredError as e:
+			logger.warning(f"{provider.display_name} alerts are not configured: {e.reason}")
+			raise CLIParseError(f"{provider.display_name} alerts are not configured on this bot.", add_node) from e
+		except AccountNotFoundError as e:
+			raise CLIParseError(f"No {provider.display_name} account named `{account}` was found.", add_node) from e
 		except FeedUnavailableError as e:
 			raise CLIParseError(
 				f"Could not load the {provider.display_name} feed for `{account}` ({e.reason}). "
 				"Check the account name, and that the bot's RSSHub instance is configured for this platform.",
+				add_node,
+			) from e
+		except AlertSourceError as e:
+			raise CLIParseError(
+				f"Could not reach {provider.display_name} to verify `{account}` ({e.reason}). Try again later.",
 				add_node,
 			) from e
 		finally:
