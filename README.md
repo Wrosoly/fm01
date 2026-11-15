@@ -21,8 +21,8 @@ featuring moderation, utility, and fun commands.
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/fm01-bot/bot.git
-cd bot
+git clone https://github.com/fm01-bot/fm01.git
+cd fm01
 ```
 
 ### 2. Create `.env`
@@ -46,7 +46,7 @@ stay at `BOT_MODE=standalone` for self-hosting.
 ### 3. Create `config.yml`
 
 ```bash
-cp config.yml.example config.yml
+cp services/bot/config.yml.example services/bot/config.yml
 ```
 
 Then edit it:
