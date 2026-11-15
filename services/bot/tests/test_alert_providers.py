@@ -198,6 +198,51 @@ async def test_generic_rss_provider_tiktok():
 	assert media.platform == "tiktok"
 
 
+RSSHUB_TIKTOK_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>dominik (@unphunny) | TikTok</title>
+    <link>https://www.tiktok.com/@unphunny</link>
+    <image><url>https://p16.tiktokcdn.com/avatar.jpeg?a=1&amp;b=2</url></image>
+    <item>
+      <title>ok #fyp</title>
+      <description><![CDATA[<video controls="" poster="https://p16.tiktokcdn.com/poster.jpeg?x=1&amp;y=2"><source src=""></video>]]></description>
+      <link>https://www.tiktok.com/@unphunny/video/1</link>
+      <guid isPermaLink="false">https://www.tiktok.com/@unphunny/video/1</guid>
+      <pubDate>Sat, 07 Nov 2026 18:29:50 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_extracts_thumbnail_from_html_description():
+	session = _mock_session(200, RSSHUB_TIKTOK_FEED)
+
+	media = await TikTokProvider().fetch_latest(session, "unphunny")
+
+	assert media is not None
+	assert media.thumbnail == "https://p16.tiktokcdn.com/poster.jpeg?x=1&y=2"
+	assert media.description == ""
+	assert media.author.avatar_url == "https://p16.tiktokcdn.com/avatar.jpeg?a=1&b=2"
+
+
+@pytest.mark.asyncio
+async def test_generic_rss_provider_strips_html_from_description():
+	feed = RSSHUB_TIKTOK_FEED.replace(
+		'<video controls="" poster="https://p16.tiktokcdn.com/poster.jpeg?x=1&amp;y=2"><source src=""></video>',
+		'<p>Line one &amp; more</p><img src="https://example.com/a.jpg"><br>Line two',
+	)
+	session = _mock_session(200, feed)
+
+	media = await TikTokProvider().fetch_latest(session, "unphunny")
+
+	assert media is not None
+	assert media.description == "Line one & more\nLine two"
+	assert media.thumbnail == "https://example.com/a.jpg"
+
+
 def _mock_session(status: int, text: str = "") -> MagicMock:
 	session = MagicMock()
 	resp = MagicMock()

@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -34,6 +35,37 @@ class FeedUnavailableError(Exception):
 		super().__init__(f"{feed_url}: {reason}")
 		self.feed_url = feed_url
 		self.reason = reason
+
+
+class _FeedHTMLParser(HTMLParser):
+	"""Splits an RSS item's HTML description into visible text and its first image."""
+
+	def __init__(self) -> None:
+		super().__init__()
+		self.parts: list[str] = []
+		self.image: str | None = None
+
+	def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+		if self.image is None:
+			attr = {"img": "src", "video": "poster"}.get(tag)
+			value = dict(attrs).get(attr) if attr else None
+			if value:
+				self.image = value
+		if tag in ("br", "p", "div"):
+			self.parts.append("\n")
+
+	def handle_data(self, data: str) -> None:
+		self.parts.append(data)
+
+
+def _parse_feed_html(raw: str) -> tuple[str | None, str | None]:
+	"""Returns ``(text, image_url)`` from an RSS description that may contain HTML (RSSHub's always does)."""
+	parser = _FeedHTMLParser()
+	parser.feed(raw)
+	parser.close()
+	text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
+	text = re.sub(r"\s*\n\s*", "\n", text).strip()
+	return text or None, parser.image
 
 
 def _parse_rss_date(raw: str) -> datetime.datetime | None:
@@ -490,7 +522,8 @@ class GenericRSSProvider(AlertProvider):
 		if pub_date_el is not None and pub_date_el.text:
 			published_at = _parse_rss_date(pub_date_el.text)
 
-		desc_text = desc_el.text.strip() if desc_el is not None and desc_el.text else None
+		desc_text, thumbnail = _parse_feed_html(desc_el.text) if desc_el is not None and desc_el.text else (None, None)
+		avatar_url = channel.findtext("image/url")
 		author_url = (
 			f"https://www.{self.platform}.com/@{account_id}"
 			if self.platform == "tiktok"
@@ -503,8 +536,10 @@ class GenericRSSProvider(AlertProvider):
 			author_name=author_name,
 			author_url=author_url,
 			author_id=account_id,
+			author_avatar_url=avatar_url.strip() if avatar_url else None,
 			media_id=media_id,
 			platform=self.platform,
+			thumbnail=thumbnail,
 			description=desc_text,
 			published_at=published_at,
 		)
