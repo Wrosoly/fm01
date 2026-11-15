@@ -107,6 +107,7 @@ async def test_youtube_provider_resolve_channel_handle():
 	cid, title = await provider.resolve_channel(session, "@RickAstleyYT")
 	assert cid == "UCuAXFkgsw1L7xaCfnd5JJOw"
 	assert title == "Rick Astley Official"
+	assert session.get.call_args.kwargs["headers"]["Cookie"] == "SOCS=CAI"
 
 
 @pytest.mark.asyncio

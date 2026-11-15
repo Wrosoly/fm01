@@ -112,7 +112,11 @@ class YouTubeProvider(AlertProvider):
 		# Otherwise resolve handle or username
 		handle_url = f"https://www.youtube.com/@{candidate}"
 		try:
-			headers = {"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)"}
+			headers = {
+				"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)",
+				# Skips the EU cookie-consent interstitial, which contains no channel metadata.
+				"Cookie": "SOCS=CAI",
+			}
 			async with session.get(handle_url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
 				if resp.status == 200:
 					html = await resp.text()
