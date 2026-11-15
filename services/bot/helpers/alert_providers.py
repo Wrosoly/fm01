@@ -6,6 +6,7 @@ import email.utils
 import logging
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any
@@ -86,6 +87,24 @@ def _parse_feed_html(raw: str) -> tuple[str | None, str | None]:
 	return text or None, parser.image
 
 
+class _AvatarCache:
+	"""Remembers creator avatar URLs so polling does not refetch them on every check."""
+
+	TTL_SECONDS = 24 * 60 * 60
+
+	def __init__(self) -> None:
+		self._entries: dict[str, tuple[float, str]] = {}
+
+	def get(self, key: str) -> str | None:
+		entry = self._entries.get(key)
+		if entry is None or time.monotonic() - entry[0] > self.TTL_SECONDS:
+			return None
+		return entry[1]
+
+	def set(self, key: str, url: str) -> None:
+		self._entries[key] = (time.monotonic(), url)
+
+
 def _parse_rss_date(raw: str) -> datetime.datetime | None:
 	"""Parses an RSS ``pubDate`` (RFC 822, as RSSHub emits) or ISO 8601 timestamp."""
 	try:
@@ -152,11 +171,42 @@ class AlertProvider(abc.ABC):
 		...
 
 
+YT_PAGE_HEADERS = {
+	"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)",
+	# Skips the EU cookie-consent interstitial, which contains no channel metadata.
+	"Cookie": "SOCS=CAI",
+}
+
+
 class YouTubeProvider(AlertProvider):
 	"""YouTube alert provider using Atom/RSS feeds and handle resolution."""
 
 	platform = "youtube"
 	display_name = "YouTube"
+
+	def __init__(self) -> None:
+		self._avatars = _AvatarCache()
+
+	async def _get_avatar(self, session: aiohttp.ClientSession, channel_url: str) -> str | None:
+		"""Reads the channel avatar from the channel page; ``None`` if it cannot be loaded."""
+		if cached := self._avatars.get(channel_url):
+			return cached
+		try:
+			async with session.get(
+				channel_url, headers=YT_PAGE_HEADERS, timeout=aiohttp.ClientTimeout(total=8)
+			) as resp:
+				if resp.status != 200:
+					logger.debug(f"YouTube channel page returned {resp.status} for {channel_url}")
+					return None
+				html = await resp.text()
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			logger.debug(f"Failed to load YouTube channel page {channel_url}: {e}")
+			return None
+		match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+		if not match:
+			return None
+		self._avatars.set(channel_url, match.group(1))
+		return match.group(1)
 
 	async def resolve_channel(
 		self,
@@ -189,12 +239,7 @@ class YouTubeProvider(AlertProvider):
 		# Otherwise resolve handle or username
 		handle_url = f"https://www.youtube.com/@{candidate}"
 		try:
-			headers = {
-				"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)",
-				# Skips the EU cookie-consent interstitial, which contains no channel metadata.
-				"Cookie": "SOCS=CAI",
-			}
-			async with session.get(handle_url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+			async with session.get(handle_url, headers=YT_PAGE_HEADERS, timeout=aiohttp.ClientTimeout(total=8)) as resp:
 				if resp.status == 200:
 					html = await resp.text()
 					# Search for channelId in page metadata
@@ -299,6 +344,7 @@ class YouTubeProvider(AlertProvider):
 			author_name=channel_name,
 			author_url=channel_url,
 			author_id=account_id,
+			author_avatar_url=await self._get_avatar(session, channel_url),
 			media_id=video_id,
 			platform="youtube",
 			thumbnail=thumbnail,
@@ -315,6 +361,7 @@ class TwitchProvider(AlertProvider):
 
 	def __init__(self) -> None:
 		self._access_token: str | None = None
+		self._avatars = _AvatarCache()
 		self._token_expires_at: float = 0.0
 
 	live_only = True
@@ -374,6 +421,20 @@ class TwitchProvider(AlertProvider):
 			raise AlertSourceError(f"Twitch API request failed: {type(e).__name__}") from e
 		return res.get("data", [])
 
+	async def _get_avatar(self, session: aiohttp.ClientSession, user_id: str) -> str | None:
+		"""Reads the user's profile image; ``None`` if it cannot be loaded."""
+		if cached := self._avatars.get(user_id):
+			return cached
+		try:
+			users = await self._helix_get(session, f"users?id={user_id}")
+		except AlertSourceError as e:
+			logger.debug(f"Failed to load Twitch avatar for {user_id}: {e}")
+			return None
+		url = users[0].get("profile_image_url") if users else None
+		if url:
+			self._avatars.set(user_id, url)
+		return url or None
+
 	async def resolve_channel(
 		self,
 		session: aiohttp.ClientSession,
@@ -430,12 +491,14 @@ class TwitchProvider(AlertProvider):
 				published_at = None
 
 		stream_url = f"https://twitch.tv/{user_login}"
+		user_id = str(stream.get("user_id", account_id))
 		return Media.create(
 			url=stream_url,
 			title=title,
 			author_name=display_name,
 			author_url=stream_url,
-			author_id=str(stream.get("user_id", account_id)),
+			author_id=user_id,
+			author_avatar_url=await self._get_avatar(session, user_id) if user_id.isdigit() else None,
 			media_id=f"stream_{stream_id}",
 			platform="twitch",
 			thumbnail=thumbnail,

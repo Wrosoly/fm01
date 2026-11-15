@@ -353,3 +353,62 @@ async def test_twitch_fetch_api_error_raises_and_drops_token_on_401(monkeypatch:
 	with pytest.raises(AlertSourceError, match="HTTP 401"):
 		await provider.fetch_latest(session, "123")
 	assert provider._access_token is None
+
+
+def _response(status: int = 200, text: str = "", json: object = None) -> MagicMock:
+	resp = MagicMock()
+	resp.status = status
+	resp.text = AsyncMock(return_value=text)
+	resp.json = AsyncMock(return_value=json)
+	ctx = MagicMock()
+	ctx.__aenter__ = AsyncMock(return_value=resp)
+	ctx.__aexit__ = AsyncMock(return_value=None)
+	return ctx
+
+
+@pytest.mark.asyncio
+async def test_youtube_fetch_latest_reads_and_caches_channel_avatar():
+	provider = YouTubeProvider()
+	page = '<meta property="og:image" content="https://yt3.googleusercontent.com/avatar=s900">'
+	session = MagicMock()
+	session.get.side_effect = [
+		_response(text=YOUTUBE_SAMPLE_FEED),
+		_response(text=page),
+		_response(text=YOUTUBE_SAMPLE_FEED),
+	]
+
+	first = await provider.fetch_latest(session, "UC1234567890abcdefghijk")
+	second = await provider.fetch_latest(session, "UC1234567890abcdefghijk")
+
+	assert first is not None and second is not None
+	assert first.author.avatar_url == second.author.avatar_url == "https://yt3.googleusercontent.com/avatar=s900"
+	assert session.get.call_count == 3  # channel page fetched once
+	assert session.get.call_args_list[1].args[0] == "https://www.youtube.com/channel/UC1234567890abcdefghijk"
+
+
+@pytest.mark.asyncio
+async def test_youtube_fetch_latest_survives_avatar_failure():
+	session = MagicMock()
+	session.get.side_effect = [_response(text=YOUTUBE_SAMPLE_FEED), _response(status=429)]
+
+	media = await YouTubeProvider().fetch_latest(session, "UC1234567890abcdefghijk")
+
+	assert media is not None
+	assert media.author.avatar_url == ""
+
+
+@pytest.mark.asyncio
+async def test_twitch_fetch_latest_reads_profile_image(monkeypatch: pytest.MonkeyPatch):
+	provider = _twitch_with_token(monkeypatch)
+	stream = {"id": "1", "user_id": "123", "user_login": "streamer", "user_name": "Streamer", "title": "Live"}
+	session = MagicMock()
+	session.get.side_effect = [
+		_response(json={"data": [stream]}),
+		_response(json={"data": [{"id": "123", "profile_image_url": "https://static-cdn.jtvnw.net/p.png"}]}),
+	]
+
+	media = await provider.fetch_latest(session, "123")
+
+	assert media is not None
+	assert media.author.avatar_url == "https://static-cdn.jtvnw.net/p.png"
+	assert session.get.call_args_list[1].args[0].endswith("users?id=123")
