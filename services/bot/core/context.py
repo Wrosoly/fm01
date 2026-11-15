@@ -5,6 +5,10 @@ from discord.ext import commands
 
 __all__ = ("Context",)
 
+# packages whose commands pass localization keys to send()
+# needed so jishaku responses don't trigger localization errors
+LOCALIZED_PACKAGES = frozenset({"cogs", "core"})
+
 
 VALID_SEND_KWARGS = frozenset(
 	{
@@ -81,8 +85,10 @@ class Context(commands.Context):
 			"poll": poll,
 		}
 
-		if key is not None:
+		if key is not None and self._localizes_keys():
 			localized_payload = await self.bot.custom_response.get_message(key, self, **format_kwargs)
+		elif key is not None:
+			localized_payload = key if content is None else content
 		else:
 			localized_payload = content
 
@@ -102,6 +108,11 @@ class Context(commands.Context):
 		if delete_after is not None:
 			await msg.delete(delay=delete_after)
 		return msg
+
+	def _localizes_keys(self) -> bool:
+		"""Whether a positional ``send()`` argument is a localization key rather than raw text."""
+		module = getattr(self.command, "module", None)
+		return not module or module.split(".")[0] in LOCALIZED_PACKAGES
 
 	async def reply(self, *args, **kwargs) -> discord.Message:
 		"""Behaves like send, but automatically sets reference to self.message. Don't use this unless it's necessary."""
