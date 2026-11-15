@@ -11,6 +11,7 @@ import random
 import time
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, overload
 
 import discord
@@ -495,7 +496,8 @@ class CustomResponse:
 		elif isinstance(data_or_path, str):
 			self.load_localizations(data_or_path)
 
-	def load_localizations(self, path: str = "../../shared/localization/responses"):
+	def load_localizations(self, path: str | None = None):
+		path: str | Path = path or Path(__file__).resolve().parent.parent.parent.parent / "shared" / "localization"
 		localization_path = pathlib.Path(path)
 		for file_path in localization_path.glob("*.l10n.json"):
 			lang = file_path.stem.removesuffix(".l10n")
@@ -588,7 +590,7 @@ class CustomResponse:
 		if self.client.debug:
 			now = time.time()
 			if now - self._last_debug_reload > 5:
-				self.load_localizations("../localization")
+				self.load_localizations()
 				self._last_debug_reload = now
 
 		if not self._localizer:

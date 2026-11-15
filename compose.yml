@@ -119,6 +119,8 @@ services:
       DISCORD_GATEWAY_URL: ${DISCORD_GATEWAY_URL:-}
     volumes:
       - ./services/bot:/bot
+      # The bot resolves localizations to /shared/localization (../../shared from /bot).
+      - ./shared:/shared:ro
 
 volumes:
   postgres_data:

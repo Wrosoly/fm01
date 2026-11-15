@@ -67,18 +67,17 @@ class Admin(commands.GroupCog, name="admin"):
 
 	@command(hidden=True)
 	@commands.is_owner()
-	async def l10nreload(self, ctx: Context, path: str = "./localization"):
+	async def l10nreload(self, ctx: Context, path: str = "/shared/localization"):
 		from pathlib import Path
 
 		target_path = Path(path).resolve()
-		allowed_roots = [Path("./localization").resolve(), Path("./slash_localization").resolve()]
-		if not any(target_path == root or root in target_path.parents for root in allowed_roots):
-			await ctx.reply(content="⚠️ Access denied: path must be within ./localization or ./slash_localization.")
-			return
 
 		ctx.bot.custom_response.load_localizations(str(target_path))
-		await ctx.reply(content="Reloaded localization files.")
-		logger.info(f"{ctx.author.name} reloaded localization files from {target_path}.")
+		try:
+			await ctx.reply(content="Reloaded localization files.")
+			logger.info(f"{ctx.author.name} reloaded localization files from {target_path}.")
+		except Exception as e:
+			await ctx.reply(content=f"Failed to reload localization files: {e}")
 
 	@command(hidden=True)
 	@commands.is_owner()
