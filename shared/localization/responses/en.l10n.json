@@ -26,24 +26,6 @@
     }
   },
   "alerts": {
-    "instagram": {
-      "embed": {
-        "author": {
-          "icon_url": "{media.author.avatar_url}",
-          "name": "{media.author.name}",
-          "url": "{media.author.url}"
-        },
-        "description": "{media.description}",
-        "footer": {
-          "text": "Instagram"
-        },
-        "image": {
-          "url": "{media.thumbnail}"
-        },
-        "title": "{media.title}",
-        "url": "{media.url}"
-      }
-    },
     "tiktok": {
       "embed": {
         "author": {

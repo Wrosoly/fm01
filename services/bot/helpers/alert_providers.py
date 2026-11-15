@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import abc
 import datetime
+import email.utils
 import logging
 import os
 import re
+import time
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -16,7 +19,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PLATFORMS = ("youtube", "twitch", "tiktok", "instagram")
+SUPPORTED_PLATFORMS = ("youtube", "twitch", "tiktok")
 
 # XML Namespaces for YouTube Atom feeds
 YT_NAMESPACES = {
@@ -26,11 +29,101 @@ YT_NAMESPACES = {
 }
 
 
+class AlertSourceError(Exception):
+	"""Raised when a platform cannot be queried for an account."""
+
+	def __init__(self, reason: str) -> None:
+		super().__init__(reason)
+		self.reason = reason
+
+
+class FeedUnavailableError(AlertSourceError):
+	"""Raised when an RSS feed cannot be downloaded or parsed."""
+
+	def __init__(self, feed_url: str, reason: str) -> None:
+		super().__init__(reason)
+		self.feed_url = feed_url
+
+	def __str__(self) -> str:
+		return f"{self.feed_url}: {self.reason}"
+
+
+class ProviderNotConfiguredError(AlertSourceError):
+	"""Raised when a platform needs credentials that the bot was not given."""
+
+
+class AccountNotFoundError(AlertSourceError):
+	"""Raised when the platform reports that the account does not exist."""
+
+
+class _FeedHTMLParser(HTMLParser):
+	"""Splits an RSS item's HTML description into visible text and its first image."""
+
+	def __init__(self) -> None:
+		super().__init__()
+		self.parts: list[str] = []
+		self.image: str | None = None
+
+	def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+		if self.image is None:
+			attr = {"img": "src", "video": "poster"}.get(tag)
+			value = dict(attrs).get(attr) if attr else None
+			if value:
+				self.image = value
+		if tag in ("br", "p", "div"):
+			self.parts.append("\n")
+
+	def handle_data(self, data: str) -> None:
+		self.parts.append(data)
+
+
+def _parse_feed_html(raw: str) -> tuple[str | None, str | None]:
+	"""Returns ``(text, image_url)`` from an RSS description that may contain HTML (RSSHub's always does)."""
+	parser = _FeedHTMLParser()
+	parser.feed(raw)
+	parser.close()
+	text = re.sub(r"[ \t]+", " ", "".join(parser.parts))
+	text = re.sub(r"\s*\n\s*", "\n", text).strip()
+	return text or None, parser.image
+
+
+class _AvatarCache:
+	"""Remembers creator avatar URLs so polling does not refetch them on every check."""
+
+	TTL_SECONDS = 24 * 60 * 60
+
+	def __init__(self) -> None:
+		self._entries: dict[str, tuple[float, str]] = {}
+
+	def get(self, key: str) -> str | None:
+		entry = self._entries.get(key)
+		if entry is None or time.monotonic() - entry[0] > self.TTL_SECONDS:
+			return None
+		return entry[1]
+
+	def set(self, key: str, url: str) -> None:
+		self._entries[key] = (time.monotonic(), url)
+
+
+def _parse_rss_date(raw: str) -> datetime.datetime | None:
+	"""Parses an RSS ``pubDate`` (RFC 822, as RSSHub emits) or ISO 8601 timestamp."""
+	try:
+		return email.utils.parsedate_to_datetime(raw)
+	except (TypeError, ValueError):
+		pass
+	try:
+		return datetime.datetime.fromisoformat(raw)
+	except ValueError:
+		return None
+
+
 class AlertProvider(abc.ABC):
 	"""Abstract base class for all social media alert providers."""
 
 	platform: str
 	display_name: str
+	# Live-only platforms report "nothing" while the account is offline, which is a valid baseline.
+	live_only: bool = False
 
 	@abc.abstractmethod
 	async def resolve_channel(
@@ -48,6 +141,9 @@ class AlertProvider(abc.ABC):
 
 		Returns:
 			tuple[str, str]: (account_id, account_name)
+
+		Raises:
+			AlertSourceError: The account cannot be verified, so alerts for it would never fire.
 
 		"""
 		...
@@ -75,11 +171,42 @@ class AlertProvider(abc.ABC):
 		...
 
 
+YT_PAGE_HEADERS = {
+	"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)",
+	# Skips the EU cookie-consent interstitial, which contains no channel metadata.
+	"Cookie": "SOCS=CAI",
+}
+
+
 class YouTubeProvider(AlertProvider):
 	"""YouTube alert provider using Atom/RSS feeds and handle resolution."""
 
 	platform = "youtube"
 	display_name = "YouTube"
+
+	def __init__(self) -> None:
+		self._avatars = _AvatarCache()
+
+	async def _get_avatar(self, session: aiohttp.ClientSession, channel_url: str) -> str | None:
+		"""Reads the channel avatar from the channel page; ``None`` if it cannot be loaded."""
+		if cached := self._avatars.get(channel_url):
+			return cached
+		try:
+			async with session.get(
+				channel_url, headers=YT_PAGE_HEADERS, timeout=aiohttp.ClientTimeout(total=8)
+			) as resp:
+				if resp.status != 200:
+					logger.debug(f"YouTube channel page returned {resp.status} for {channel_url}")
+					return None
+				html = await resp.text()
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			logger.debug(f"Failed to load YouTube channel page {channel_url}: {e}")
+			return None
+		match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+		if not match:
+			return None
+		self._avatars.set(channel_url, match.group(1))
+		return match.group(1)
 
 	async def resolve_channel(
 		self,
@@ -112,12 +239,7 @@ class YouTubeProvider(AlertProvider):
 		# Otherwise resolve handle or username
 		handle_url = f"https://www.youtube.com/@{candidate}"
 		try:
-			headers = {
-				"User-Agent": "Mozilla/5.0 (compatible; fm01-bot/1.0; +https://github.com)",
-				# Skips the EU cookie-consent interstitial, which contains no channel metadata.
-				"Cookie": "SOCS=CAI",
-			}
-			async with session.get(handle_url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+			async with session.get(handle_url, headers=YT_PAGE_HEADERS, timeout=aiohttp.ClientTimeout(total=8)) as resp:
 				if resp.status == 200:
 					html = await resp.text()
 					# Search for channelId in page metadata
@@ -222,6 +344,7 @@ class YouTubeProvider(AlertProvider):
 			author_name=channel_name,
 			author_url=channel_url,
 			author_id=account_id,
+			author_avatar_url=await self._get_avatar(session, channel_url),
 			media_id=video_id,
 			platform="youtube",
 			thumbnail=thumbnail,
@@ -238,21 +361,21 @@ class TwitchProvider(AlertProvider):
 
 	def __init__(self) -> None:
 		self._access_token: str | None = None
+		self._avatars = _AvatarCache()
 		self._token_expires_at: float = 0.0
 
-	def _get_credentials(self, bot: Bot | None) -> tuple[str | None, str | None]:
-		client_id = getattr(bot.config, "twitch_client_id", None) if bot and hasattr(bot, "config") else None
-		client_secret = getattr(bot.config, "twitch_client_secret", None) if bot and hasattr(bot, "config") else None
-		if not client_id:
-			client_id = os.getenv("TWITCH_CLIENT_ID")
-		if not client_secret:
-			client_secret = os.getenv("TWITCH_CLIENT_SECRET")
+	live_only = True
+
+	@staticmethod
+	def _get_credentials() -> tuple[str, str]:
+		client_id = os.getenv("TWITCH_CLIENT_ID")
+		client_secret = os.getenv("TWITCH_CLIENT_SECRET")
+		if not client_id or not client_secret:
+			raise ProviderNotConfiguredError("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are not set")
 		return client_id, client_secret
 
-	async def _get_app_token(self, session: aiohttp.ClientSession, bot: Bot | None) -> str | None:
-		client_id, client_secret = self._get_credentials(bot)
-		if not client_id or not client_secret:
-			return None
+	async def _get_app_token(self, session: aiohttp.ClientSession) -> str:
+		client_id, client_secret = self._get_credentials()
 
 		now = datetime.datetime.now(datetime.UTC).timestamp()
 		if self._access_token and now < (self._token_expires_at - 60):
@@ -266,16 +389,51 @@ class TwitchProvider(AlertProvider):
 		}
 		try:
 			async with session.post(token_url, params=params, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-				if resp.status == 200:
-					data = await resp.json()
-					self._access_token = data.get("access_token")
-					expires_in = data.get("expires_in", 3600)
-					self._token_expires_at = now + float(expires_in)
-					return self._access_token
-				logger.warning(f"Failed to obtain Twitch OAuth token: HTTP {resp.status}")
+				if resp.status != 200:
+					raise AlertSourceError(f"Twitch OAuth token request failed: HTTP {resp.status}")
+				data = await resp.json()
 		except (aiohttp.ClientError, TimeoutError, OSError) as e:
-			logger.warning(f"Error fetching Twitch token: {e}")
-		return None
+			raise AlertSourceError(f"Twitch OAuth token request failed: {type(e).__name__}") from e
+
+		token = data.get("access_token")
+		if not token:
+			raise AlertSourceError("Twitch OAuth token response had no access_token")
+		self._access_token = token
+		self._token_expires_at = now + float(data.get("expires_in", 3600))
+		return token
+
+	async def _helix_get(self, session: aiohttp.ClientSession, path: str) -> list[dict[str, Any]]:
+		"""Calls a Helix endpoint and returns its ``data`` list."""
+		client_id, _ = self._get_credentials()
+		token = await self._get_app_token(session)
+		headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
+		try:
+			async with session.get(
+				f"https://api.twitch.tv/helix/{path}", headers=headers, timeout=aiohttp.ClientTimeout(total=8)
+			) as resp:
+				if resp.status == 401:
+					# Token revoked or expired early: fetch a new one next time.
+					self._access_token = None
+				if resp.status != 200:
+					raise AlertSourceError(f"Twitch API returned HTTP {resp.status}")
+				res = await resp.json()
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			raise AlertSourceError(f"Twitch API request failed: {type(e).__name__}") from e
+		return res.get("data", [])
+
+	async def _get_avatar(self, session: aiohttp.ClientSession, user_id: str) -> str | None:
+		"""Reads the user's profile image; ``None`` if it cannot be loaded."""
+		if cached := self._avatars.get(user_id):
+			return cached
+		try:
+			users = await self._helix_get(session, f"users?id={user_id}")
+		except AlertSourceError as e:
+			logger.debug(f"Failed to load Twitch avatar for {user_id}: {e}")
+			return None
+		url = users[0].get("profile_image_url") if users else None
+		if url:
+			self._avatars.set(user_id, url)
+		return url or None
 
 	async def resolve_channel(
 		self,
@@ -287,22 +445,10 @@ class TwitchProvider(AlertProvider):
 		url_match = re.search(r"twitch\.tv/([^/?#]+)", cleaned)
 		login = (url_match.group(1) if url_match else cleaned).lstrip("@").lower()
 
-		token = await self._get_app_token(session, bot)
-		client_id, _ = self._get_credentials(bot)
-		if token and client_id:
-			headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
-			try:
-				url = f"https://api.twitch.tv/helix/users?login={login}"
-				async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-					if resp.status == 200:
-						data = await resp.json()
-						users = data.get("data", [])
-						if users:
-							return users[0]["id"], users[0]["display_name"]
-			except (aiohttp.ClientError, TimeoutError, OSError) as e:
-				logger.debug(f"Twitch user lookup error for {login}: {e}")
-
-		return login, login
+		users = await self._helix_get(session, f"users?login={login}")
+		if not users:
+			raise AccountNotFoundError(f"no Twitch user named {login}")
+		return users[0]["id"], users[0]["display_name"]
 
 	async def fetch_latest(
 		self,
@@ -311,27 +457,15 @@ class TwitchProvider(AlertProvider):
 		account_name: str | None = None,
 		bot: Bot | None = None,
 	) -> Media | None:
-		token = await self._get_app_token(session, bot)
-		client_id, _ = self._get_credentials(bot)
-		if not token or not client_id:
-			logger.debug("Twitch credentials not configured, skipping Twitch stream check.")
-			return None
+		"""Returns the current stream, or ``None`` while offline.
 
-		headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
+		Raises:
+			AlertSourceError: Twitch could not be queried, so the offline state is unknown.
+
+		"""
 		# account_id could be numeric user_id or login name
 		param_key = "user_id" if account_id.isdigit() else "user_login"
-		url = f"https://api.twitch.tv/helix/streams?{param_key}={account_id.lower()}"
-
-		try:
-			async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-				if resp.status != 200:
-					logger.debug(f"Twitch streams API returned {resp.status} for {account_id}")
-					return None
-				res = await resp.json()
-				data: list[dict[str, Any]] = res.get("data", [])
-		except (aiohttp.ClientError, TimeoutError, OSError) as e:
-			logger.debug(f"Error fetching Twitch streams for {account_id}: {e}")
-			return None
+		data = await self._helix_get(session, f"streams?{param_key}={account_id.lower()}")
 
 		if not data:
 			return None
@@ -357,12 +491,14 @@ class TwitchProvider(AlertProvider):
 				published_at = None
 
 		stream_url = f"https://twitch.tv/{user_login}"
+		user_id = str(stream.get("user_id", account_id))
 		return Media.create(
 			url=stream_url,
 			title=title,
 			author_name=display_name,
 			author_url=stream_url,
-			author_id=str(stream.get("user_id", account_id)),
+			author_id=user_id,
+			author_avatar_url=await self._get_avatar(session, user_id) if user_id.isdigit() else None,
 			media_id=f"stream_{stream_id}",
 			platform="twitch",
 			thumbnail=thumbnail,
@@ -372,20 +508,35 @@ class TwitchProvider(AlertProvider):
 
 
 class GenericRSSProvider(AlertProvider):
-	"""Pluggable RSS-based alert provider for platforms like TikTok and Instagram."""
+	"""Pluggable RSSHub-based alert provider for platforms like TikTok."""
 
 	def __init__(self, platform: str, display_name: str, path_prefix: str) -> None:
 		self.platform = platform
 		self.display_name = display_name
 		self.path_prefix = path_prefix
 
-	def _get_base_url(self, bot: Bot | None) -> str:
-		if bot and hasattr(bot, "config") and getattr(bot.config, "rsshub_url", None):
-			return str(bot.config.rsshub_url).rstrip("/")
-		env_url = os.getenv("RSSHUB_URL")
-		if env_url:
-			return env_url.rstrip("/")
-		return "https://rsshub.app"
+	@staticmethod
+	def _get_base_url() -> str:
+		return (os.getenv("RSSHUB_URL") or "https://rsshub.app").rstrip("/")
+
+	async def _fetch_feed(self, session: aiohttp.ClientSession, account_id: str) -> ET.Element:
+		"""Downloads and parses the account's RSS feed.
+
+		Raises:
+			FeedUnavailableError: The feed could not be downloaded or parsed.
+
+		"""
+		feed_url = f"{self._get_base_url()}/{self.path_prefix}/{account_id}"
+		try:
+			async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+				if resp.status != 200:
+					raise FeedUnavailableError(feed_url, f"HTTP {resp.status}")
+				xml_text = await resp.text()
+			return ET.fromstring(xml_text)
+		except ET.ParseError as e:
+			raise FeedUnavailableError(feed_url, f"invalid XML ({e})") from e
+		except (aiohttp.ClientError, TimeoutError, OSError) as e:
+			raise FeedUnavailableError(feed_url, type(e).__name__) from e
 
 	async def resolve_channel(
 		self,
@@ -397,6 +548,8 @@ class GenericRSSProvider(AlertProvider):
 		handle_match = re.search(r"(?:com|app)/(?:@|p/)?([^/?#]+)", cleaned)
 		candidate = handle_match.group(1) if handle_match else cleaned
 		candidate = candidate.lstrip("@")
+		# Fail on add rather than silently never alerting.
+		await self._fetch_feed(session, candidate)
 		return candidate, candidate
 
 	async def fetch_latest(
@@ -406,17 +559,10 @@ class GenericRSSProvider(AlertProvider):
 		account_name: str | None = None,
 		bot: Bot | None = None,
 	) -> Media | None:
-		base_url = self._get_base_url(bot)
-		feed_url = f"{base_url}/{self.path_prefix}/{account_id}"
-
 		try:
-			async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-				if resp.status != 200:
-					return None
-				xml_text = await resp.text()
-				root = ET.fromstring(xml_text)
-		except (aiohttp.ClientError, ET.ParseError, TimeoutError, OSError) as e:
-			logger.debug(f"Error fetching feed from {feed_url}: {e}")
+			root = await self._fetch_feed(session, account_id)
+		except FeedUnavailableError as e:
+			logger.warning(f"{self.display_name} feed unavailable for {account_id}: {e}")
 			return None
 
 		# Handle RSS 2.0 channel/item structure
@@ -452,12 +598,10 @@ class GenericRSSProvider(AlertProvider):
 
 		published_at: datetime.datetime | None = None
 		if pub_date_el is not None and pub_date_el.text:
-			try:
-				published_at = datetime.datetime.fromisoformat(pub_date_el.text)
-			except ValueError:
-				published_at = None
+			published_at = _parse_rss_date(pub_date_el.text)
 
-		desc_text = desc_el.text.strip() if desc_el is not None and desc_el.text else None
+		desc_text, thumbnail = _parse_feed_html(desc_el.text) if desc_el is not None and desc_el.text else (None, None)
+		avatar_url = channel.findtext("image/url")
 		author_url = (
 			f"https://www.{self.platform}.com/@{account_id}"
 			if self.platform == "tiktok"
@@ -470,8 +614,10 @@ class GenericRSSProvider(AlertProvider):
 			author_name=author_name,
 			author_url=author_url,
 			author_id=account_id,
+			author_avatar_url=avatar_url.strip() if avatar_url else None,
 			media_id=media_id,
 			platform=self.platform,
+			thumbnail=thumbnail,
 			description=desc_text,
 			published_at=published_at,
 		)
@@ -484,19 +630,11 @@ class TikTokProvider(GenericRSSProvider):
 		super().__init__(platform="tiktok", display_name="TikTok", path_prefix="tiktok/user")
 
 
-class InstagramProvider(GenericRSSProvider):
-	"""Instagram alert provider."""
-
-	def __init__(self) -> None:
-		super().__init__(platform="instagram", display_name="Instagram", path_prefix="instagram/user")
-
-
 # Registry instance dictionary
 ALERT_PROVIDERS: dict[str, AlertProvider] = {
 	"youtube": YouTubeProvider(),
 	"twitch": TwitchProvider(),
 	"tiktok": TikTokProvider(),
-	"instagram": InstagramProvider(),
 }
 
 

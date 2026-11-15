@@ -13,8 +13,6 @@ def config_cog():
 	mock_bot = MagicMock()
 	mock_bot.db = AsyncMock()
 	mock_bot.config = MagicMock()
-	mock_bot.config.twitch_client_id = None
-	mock_bot.config.twitch_client_secret = None
 	mock_bot.get_cog = MagicMock(return_value=None)
 	return Config(mock_bot)
 
@@ -175,3 +173,20 @@ async def test_alert_enable_disable_execution(config_cog):
 
 	await config_cog.parser.execute("alert disable 1", ctx=ctx)
 	assert "Alert #1 disabled" in ctx.send.call_args[1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_alert_add_twitch_without_credentials_fails(config_cog, monkeypatch):
+	monkeypatch.delenv("TWITCH_CLIENT_ID", raising=False)
+	monkeypatch.delenv("TWITCH_CLIENT_SECRET", raising=False)
+	ctx = MagicMock()
+	ctx.bot = config_cog.client
+	ctx.guild = MagicMock()
+	ctx.guild.id = 123
+	ctx.channel = MagicMock(spec=discord.TextChannel)
+	ctx.bot.db.fetchval = AsyncMock(return_value=0)
+	ctx.bot.db.fetchrow = AsyncMock()
+
+	with pytest.raises(CLIParseError, match="Twitch alerts are not configured"):
+		await config_cog.parser.execute("alert add twitch playhubstreams", ctx=ctx)
+	ctx.bot.db.fetchrow.assert_not_called()

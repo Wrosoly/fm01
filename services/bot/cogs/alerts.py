@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Baseline stored for live-only platforms (Twitch) when the alert's first check finds the account offline,
+# so the next stream differs from the baseline and is announced.
+OFFLINE_BASELINE = "offline"
+
 
 class AlertLimitReachedError(Exception):
 	"""Raised when a guild attempts to configure more than the allowed alert pairs."""
@@ -94,6 +98,21 @@ class Alerts(commands.Cog, name="Alerts"):
 			bot=self.client,
 		)
 		if not media:
+			if provider.live_only:
+				await self.client.db.execute(
+					"""
+					UPDATE media_alerts SET last_media_id = $1, last_media_time = $2
+					WHERE is_enabled = true
+					AND platform = $3
+					AND (channel_account = $4 OR account_id = $5)
+					AND last_media_id IS NULL
+					""",
+					OFFLINE_BASELINE,
+					datetime.datetime.now(datetime.UTC),
+					platform,
+					channel_account,
+					account_id,
+				)
 			return
 
 		# Fetch all alert subscriptions for this platform & account

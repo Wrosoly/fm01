@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import discord
-from helpers.alert_providers import SUPPORTED_PLATFORMS, get_provider
+from helpers.alert_providers import (
+	SUPPORTED_PLATFORMS,
+	AccountNotFoundError,
+	AlertSourceError,
+	FeedUnavailableError,
+	ProviderNotConfiguredError,
+	get_provider,
+)
 from helpers.cli_parser import CLINode, CLIParseError
 
 from .helpers import resolve_channel
@@ -12,17 +20,19 @@ from .helpers import resolve_channel
 if TYPE_CHECKING:
 	from core import Context
 
+logger = logging.getLogger(__name__)
+
 
 def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
 	"""Registers alert configuration subcommands under the ?!config tree."""
 	alert_node = parent_node.create_subcommand(
 		"alert",
-		description="Configure YouTube, Twitch, TikTok, and Instagram upload and stream alerts.",
+		description="Configure YouTube, Twitch, and TikTok upload and stream alerts.",
 	)
 
 	# 1. alert add
 	add_node = alert_node.create_subcommand("add", description="Add an upload or stream alert.")
-	add_node.add_argument("platform", help="Platform name: youtube, twitch, tiktok, or instagram")
+	add_node.add_argument("platform", help="Platform name: youtube, twitch, or tiktok")
 	add_node.add_argument("account", help="Channel account name, handle, URL, or ID")
 	add_node.add_argument("channel_pos", required=False, help="Target Discord channel mention or name")
 	add_node.add_option("channel", "c", help="Target Discord channel")
@@ -85,6 +95,22 @@ def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
 
 		try:
 			account_id, account_name = await provider.resolve_channel(session, account, bot=ctx.bot)
+		except ProviderNotConfiguredError as e:
+			logger.warning(f"{provider.display_name} alerts are not configured: {e.reason}")
+			raise CLIParseError(f"{provider.display_name} alerts are not configured on this bot.", add_node) from e
+		except AccountNotFoundError as e:
+			raise CLIParseError(f"No {provider.display_name} account named `{account}` was found.", add_node) from e
+		except FeedUnavailableError as e:
+			raise CLIParseError(
+				f"Could not load the {provider.display_name} feed for `{account}` ({e.reason}). "
+				"Check the account name, and that the bot's RSSHub instance is configured for this platform.",
+				add_node,
+			) from e
+		except AlertSourceError as e:
+			raise CLIParseError(
+				f"Could not reach {provider.display_name} to verify `{account}` ({e.reason}). Try again later.",
+				add_node,
+			) from e
 		finally:
 			if not alerts_cog or not hasattr(alerts_cog, "get_session"):
 				await session.close()
