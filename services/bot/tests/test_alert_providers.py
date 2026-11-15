@@ -111,14 +111,13 @@ async def test_youtube_provider_resolve_channel_handle():
 
 
 @pytest.mark.asyncio
-async def test_twitch_provider_fetch_live_stream():
+async def test_twitch_provider_fetch_live_stream(monkeypatch: pytest.MonkeyPatch):
 	provider = TwitchProvider()
 	provider._access_token = "mock_token"
 	provider._token_expires_at = datetime.datetime.now(datetime.UTC).timestamp() + 3600
 
-	bot = MagicMock()
-	bot.config.twitch_client_id = "mock_client_id"
-	bot.config.twitch_client_secret = "mock_client_secret"
+	monkeypatch.setenv("TWITCH_CLIENT_ID", "mock_client_id")
+	monkeypatch.setenv("TWITCH_CLIENT_SECRET", "mock_client_secret")
 
 	session = MagicMock()
 	resp = MagicMock()
@@ -143,7 +142,7 @@ async def test_twitch_provider_fetch_live_stream():
 	session.get.return_value.__aenter__ = AsyncMock(return_value=resp)
 	session.get.return_value.__aexit__ = AsyncMock(return_value=None)
 
-	media = await provider.fetch_latest(session, "ninja", bot=bot)
+	media = await provider.fetch_latest(session, "ninja")
 	assert media is not None
 	assert media.id == "stream_41234567890"
 	assert "Ninja" in media.author.name
@@ -155,14 +154,13 @@ async def test_twitch_provider_fetch_live_stream():
 
 
 @pytest.mark.asyncio
-async def test_twitch_provider_stream_offline():
+async def test_twitch_provider_stream_offline(monkeypatch: pytest.MonkeyPatch):
 	provider = TwitchProvider()
 	provider._access_token = "mock_token"
 	provider._token_expires_at = datetime.datetime.now(datetime.UTC).timestamp() + 3600
 
-	bot = MagicMock()
-	bot.config.twitch_client_id = "mock_client_id"
-	bot.config.twitch_client_secret = "mock_client_secret"
+	monkeypatch.setenv("TWITCH_CLIENT_ID", "mock_client_id")
+	monkeypatch.setenv("TWITCH_CLIENT_SECRET", "mock_client_secret")
 
 	session = MagicMock()
 	resp = MagicMock()
@@ -172,7 +170,7 @@ async def test_twitch_provider_stream_offline():
 	session.get.return_value.__aenter__ = AsyncMock(return_value=resp)
 	session.get.return_value.__aexit__ = AsyncMock(return_value=None)
 
-	media = await provider.fetch_latest(session, "ninja", bot=bot)
+	media = await provider.fetch_latest(session, "ninja")
 	assert media is None
 
 

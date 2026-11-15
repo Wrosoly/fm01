@@ -13,8 +13,6 @@ def config_cog():
 	mock_bot = MagicMock()
 	mock_bot.db = AsyncMock()
 	mock_bot.config = MagicMock()
-	mock_bot.config.twitch_client_id = None
-	mock_bot.config.twitch_client_secret = None
 	mock_bot.get_cog = MagicMock(return_value=None)
 	return Config(mock_bot)
 

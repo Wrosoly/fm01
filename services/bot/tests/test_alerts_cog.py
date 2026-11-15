@@ -14,8 +14,6 @@ def mock_bot():
 	bot.db = AsyncMock()
 	bot.wait_until_ready = AsyncMock()
 	bot.config = MagicMock()
-	bot.config.twitch_client_id = None
-	bot.config.twitch_client_secret = None
 	bot.config.emojis = {"check": "✅", "x": "❌"}
 	bot.custom_response = MagicMock()
 	bot.custom_response.convert_embeds = MagicMock(side_effect=lambda x: x)

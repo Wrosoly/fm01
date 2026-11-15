@@ -294,17 +294,12 @@ class TwitchProvider(AlertProvider):
 		self._access_token: str | None = None
 		self._token_expires_at: float = 0.0
 
-	def _get_credentials(self, bot: Bot | None) -> tuple[str | None, str | None]:
-		client_id = getattr(bot.config, "twitch_client_id", None) if bot and hasattr(bot, "config") else None
-		client_secret = getattr(bot.config, "twitch_client_secret", None) if bot and hasattr(bot, "config") else None
-		if not client_id:
-			client_id = os.getenv("TWITCH_CLIENT_ID")
-		if not client_secret:
-			client_secret = os.getenv("TWITCH_CLIENT_SECRET")
-		return client_id, client_secret
+	@staticmethod
+	def _get_credentials() -> tuple[str | None, str | None]:
+		return os.getenv("TWITCH_CLIENT_ID") or None, os.getenv("TWITCH_CLIENT_SECRET") or None
 
-	async def _get_app_token(self, session: aiohttp.ClientSession, bot: Bot | None) -> str | None:
-		client_id, client_secret = self._get_credentials(bot)
+	async def _get_app_token(self, session: aiohttp.ClientSession) -> str | None:
+		client_id, client_secret = self._get_credentials()
 		if not client_id or not client_secret:
 			return None
 
@@ -341,8 +336,8 @@ class TwitchProvider(AlertProvider):
 		url_match = re.search(r"twitch\.tv/([^/?#]+)", cleaned)
 		login = (url_match.group(1) if url_match else cleaned).lstrip("@").lower()
 
-		token = await self._get_app_token(session, bot)
-		client_id, _ = self._get_credentials(bot)
+		token = await self._get_app_token(session)
+		client_id, _ = self._get_credentials()
 		if token and client_id:
 			headers = {"Client-ID": client_id, "Authorization": f"Bearer {token}"}
 			try:
@@ -365,8 +360,8 @@ class TwitchProvider(AlertProvider):
 		account_name: str | None = None,
 		bot: Bot | None = None,
 	) -> Media | None:
-		token = await self._get_app_token(session, bot)
-		client_id, _ = self._get_credentials(bot)
+		token = await self._get_app_token(session)
+		client_id, _ = self._get_credentials()
 		if not token or not client_id:
 			logger.debug("Twitch credentials not configured, skipping Twitch stream check.")
 			return None
@@ -433,22 +428,18 @@ class GenericRSSProvider(AlertProvider):
 		self.display_name = display_name
 		self.path_prefix = path_prefix
 
-	def _get_base_url(self, bot: Bot | None) -> str:
-		if bot and hasattr(bot, "config") and getattr(bot.config, "rsshub_url", None):
-			return str(bot.config.rsshub_url).rstrip("/")
-		env_url = os.getenv("RSSHUB_URL")
-		if env_url:
-			return env_url.rstrip("/")
-		return "https://rsshub.app"
+	@staticmethod
+	def _get_base_url() -> str:
+		return (os.getenv("RSSHUB_URL") or "https://rsshub.app").rstrip("/")
 
-	async def _fetch_feed(self, session: aiohttp.ClientSession, account_id: str, bot: Bot | None) -> ET.Element:
+	async def _fetch_feed(self, session: aiohttp.ClientSession, account_id: str) -> ET.Element:
 		"""Downloads and parses the account's RSS feed.
 
 		Raises:
 			FeedUnavailableError: The feed could not be downloaded or parsed.
 
 		"""
-		feed_url = f"{self._get_base_url(bot)}/{self.path_prefix}/{account_id}"
+		feed_url = f"{self._get_base_url()}/{self.path_prefix}/{account_id}"
 		try:
 			async with session.get(feed_url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
 				if resp.status != 200:
@@ -471,7 +462,7 @@ class GenericRSSProvider(AlertProvider):
 		candidate = handle_match.group(1) if handle_match else cleaned
 		candidate = candidate.lstrip("@")
 		# Fail on add rather than silently never alerting.
-		await self._fetch_feed(session, candidate, bot)
+		await self._fetch_feed(session, candidate)
 		return candidate, candidate
 
 	async def fetch_latest(
@@ -482,7 +473,7 @@ class GenericRSSProvider(AlertProvider):
 		bot: Bot | None = None,
 	) -> Media | None:
 		try:
-			root = await self._fetch_feed(session, account_id, bot)
+			root = await self._fetch_feed(session, account_id)
 		except FeedUnavailableError as e:
 			logger.warning(f"{self.display_name} feed unavailable for {account_id}: {e}")
 			return None
