@@ -69,5 +69,5 @@ allowed_mentions:
 twitch_client_id: null
 twitch_client_secret: null
 
-# Optional RSSHub or custom bridge URL for TikTok/Instagram feeds
+# Optional RSSHub or custom bridge URL for TikTok feeds
 rsshub_url: null

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from helpers.alert_providers import (
 	FeedUnavailableError,
-	InstagramProvider,
 	TikTokProvider,
 	TwitchProvider,
 	YouTubeProvider,
@@ -178,11 +177,9 @@ async def test_twitch_provider_stream_offline():
 
 
 @pytest.mark.asyncio
-async def test_generic_rss_provider_tiktok_and_instagram():
+async def test_generic_rss_provider_tiktok():
 	tiktok = TikTokProvider()
 	assert tiktok.platform == "tiktok"
-	instagram = InstagramProvider()
-	assert instagram.platform == "instagram"
 
 	session = MagicMock()
 	resp = MagicMock()
@@ -216,7 +213,7 @@ async def test_generic_rss_provider_fetch_latest_logs_blocked_feed(caplog: pytes
 	session = _mock_session(403, "Due to cost considerations ...")
 
 	with caplog.at_level("WARNING", logger="helpers.alert_providers"):
-		media = await InstagramProvider().fetch_latest(session, "creator")
+		media = await TikTokProvider().fetch_latest(session, "creator")
 
 	assert media is None
 	assert "HTTP 403" in caplog.text
@@ -227,10 +224,10 @@ async def test_generic_rss_provider_resolve_channel_rejects_blocked_feed():
 	session = _mock_session(403)
 
 	with pytest.raises(FeedUnavailableError) as exc_info:
-		await InstagramProvider().resolve_channel(session, "https://www.instagram.com/creator/")
+		await TikTokProvider().resolve_channel(session, "https://www.tiktok.com/@creator")
 
 	assert exc_info.value.reason == "HTTP 403"
-	assert exc_info.value.feed_url.endswith("/instagram/user/creator")
+	assert exc_info.value.feed_url.endswith("/tiktok/user/creator")
 
 
 @pytest.mark.asyncio
@@ -245,7 +242,7 @@ async def test_generic_rss_provider_parses_rfc822_pub_date():
 	feed = RSS_SAMPLE_FEED.replace("2026-11-01T12:00:00+00:00", "Sun, 01 Nov 2026 12:00:00 GMT")
 	session = _mock_session(200, feed)
 
-	media = await InstagramProvider().fetch_latest(session, "creator")
+	media = await TikTokProvider().fetch_latest(session, "creator")
 
 	assert media is not None
 	assert media._published_at == datetime.datetime(2026, 11, 1, 12, tzinfo=datetime.UTC)
@@ -256,5 +253,5 @@ def test_get_provider_registry():
 	assert isinstance(get_provider("YOUTUBE"), YouTubeProvider)
 	assert isinstance(get_provider("twitch"), TwitchProvider)
 	assert isinstance(get_provider("tiktok"), TikTokProvider)
-	assert isinstance(get_provider("instagram"), InstagramProvider)
+	assert get_provider("instagram") is None
 	assert get_provider("unknown_platform") is None

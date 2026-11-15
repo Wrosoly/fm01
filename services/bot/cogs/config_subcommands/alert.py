@@ -17,12 +17,12 @@ def setup_alert_subcommands(parent_node: CLINode) -> CLINode:
 	"""Registers alert configuration subcommands under the ?!config tree."""
 	alert_node = parent_node.create_subcommand(
 		"alert",
-		description="Configure YouTube, Twitch, TikTok, and Instagram upload and stream alerts.",
+		description="Configure YouTube, Twitch, and TikTok upload and stream alerts.",
 	)
 
 	# 1. alert add
 	add_node = alert_node.create_subcommand("add", description="Add an upload or stream alert.")
-	add_node.add_argument("platform", help="Platform name: youtube, twitch, tiktok, or instagram")
+	add_node.add_argument("platform", help="Platform name: youtube, twitch, or tiktok")
 	add_node.add_argument("account", help="Channel account name, handle, URL, or ID")
 	add_node.add_argument("channel_pos", required=False, help="Target Discord channel mention or name")
 	add_node.add_option("channel", "c", help="Target Discord channel")

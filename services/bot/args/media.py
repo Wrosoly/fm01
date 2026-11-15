@@ -121,7 +121,7 @@ class Media:
 
 	@property
 	def platform(self) -> str:
-		"""The name of the platform (e.g. youtube, twitch, tiktok, instagram)."""
+		"""The name of the platform (e.g. youtube, twitch, tiktok)."""
 		return self._platform
 
 	source = platform

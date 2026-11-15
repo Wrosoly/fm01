@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PLATFORMS = ("youtube", "twitch", "tiktok", "instagram")
+SUPPORTED_PLATFORMS = ("youtube", "twitch", "tiktok")
 
 # XML Namespaces for YouTube Atom feeds
 YT_NAMESPACES = {
@@ -394,7 +394,7 @@ class TwitchProvider(AlertProvider):
 
 
 class GenericRSSProvider(AlertProvider):
-	"""Pluggable RSS-based alert provider for platforms like TikTok and Instagram."""
+	"""Pluggable RSSHub-based alert provider for platforms like TikTok."""
 
 	def __init__(self, platform: str, display_name: str, path_prefix: str) -> None:
 		self.platform = platform
@@ -517,19 +517,11 @@ class TikTokProvider(GenericRSSProvider):
 		super().__init__(platform="tiktok", display_name="TikTok", path_prefix="tiktok/user")
 
 
-class InstagramProvider(GenericRSSProvider):
-	"""Instagram alert provider."""
-
-	def __init__(self) -> None:
-		super().__init__(platform="instagram", display_name="Instagram", path_prefix="instagram/user")
-
-
 # Registry instance dictionary
 ALERT_PROVIDERS: dict[str, AlertProvider] = {
 	"youtube": YouTubeProvider(),
 	"twitch": TwitchProvider(),
 	"tiktok": TikTokProvider(),
-	"instagram": InstagramProvider(),
 }
 
 
