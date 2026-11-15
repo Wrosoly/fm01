@@ -296,7 +296,7 @@ class TwitchProvider(AlertProvider):
 
 	@staticmethod
 	def _get_credentials() -> tuple[str | None, str | None]:
-		return os.getenv("TWITCH_CLIENT_ID") or None, os.getenv("TWITCH_CLIENT_SECRET") or None
+		return os.getenv("TWITCH_CLIENT_ID"), os.getenv("TWITCH_CLIENT_SECRET")
 
 	async def _get_app_token(self, session: aiohttp.ClientSession) -> str | None:
 		client_id, client_secret = self._get_credentials()
