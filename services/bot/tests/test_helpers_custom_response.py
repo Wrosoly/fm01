@@ -588,7 +588,7 @@ class TestLocalizationOwnedLayout:
 	async def test_balance_debt_field_is_shown_only_in_debt(self, mock_bot, debt, fields):
 		mock_bot.locale_cache = {}
 		cr = CustomResponse(mock_bot)
-		cr.load_localizations("./localization")
+		cr.load_localizations()
 		member = MagicMock(spec=discord.Member)
 		member.guild = self.ctx().guild
 		member.roles = []

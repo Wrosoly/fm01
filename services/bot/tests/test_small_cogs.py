@@ -8,6 +8,7 @@ import pytest
 from cogs.admin import Admin
 from cogs.setup import Setup
 from discord.ext import commands
+from helpers.custom_response import RESPONSES_PATH
 
 
 @pytest.fixture
@@ -70,6 +71,6 @@ async def test_l10n_reload_refuses_paths_outside_the_localization_folders(ctx):
 async def test_l10n_reload_loads_the_localization_folder(ctx):
 	cog = Admin(MagicMock())
 
-	await cog.l10nreload.callback(cog, ctx, "./localization")
+	await cog.l10nreload.callback(cog, ctx, str(RESPONSES_PATH))
 
 	ctx.bot.custom_response.load_localizations.assert_called_once()

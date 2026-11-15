@@ -16,7 +16,7 @@ def mock_bot():
 	bot.config.emojis = {"check": "✅", "x": "❌"}
 	bot.can_run = AsyncMock(return_value=True)
 	cr = CustomResponse(bot)
-	cr.load_localizations("./localization")
+	cr.load_localizations()
 	bot.custom_response = cr
 	return bot
 
