@@ -1,42 +1,61 @@
-"""GuildSettings: caching and cross-instance invalidation, with real PostgreSQL and a shared in-process event bus."""
+"""GuildSettings: caching and cross-instance invalidation, with a shared in-process event bus.
+
+Database-backed settings run against real PostgreSQL. Remote settings run against `FakeApi`, which behaves like the
+Internal API: it persists writes and announces them itself, echoing the writer's origin.
+"""
 
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import asyncpg
 import pytest
 from cogs.mod.cases import retention_setting
 from core.clustering import LocalEventBus
-from core.settings import (
-	EVENTS_CHANNEL,
-	GuildSetting,
-	GuildSettings,
-	Prefix,
-	load_all_locale_overrides,
-	load_all_prefixes,
-	load_locale_override,
-	load_prefix,
-	save_locale_override,
-	save_prefix,
-)
+from core.settings import EVENTS_CHANNEL, GuildSetting, GuildSettings, Prefix
 
 pytestmark = pytest.mark.db
 
 GUILD = 42
 
 
-class Instance:
-	"""One bot process: its own caches, sharing the database and event bus with the others."""
+class FakeApi:
+	"""Remote setting storage shared by every instance, announcing each write on the bus like the API does."""
 
-	def __init__(self, db: asyncpg.Pool, bus: LocalEventBus) -> None:
+	def __init__(self, bus: LocalEventBus) -> None:
+		self.bus = bus
+		self.values: dict[str, dict[int, Any]] = {"prefix": {}, "locale": {}}
+		self.defaults: dict[str, Any] = {"prefix": ("?!", True), "locale": None}
+		self.loads = 0
+
+	async def write(self, key: str, guild_id: int, value: Any, origin: str | None) -> None:
+		self.values[key][guild_id] = value
+		await self.bus.publish(
+			EVENTS_CHANNEL, {"type": "INVALIDATE_SETTING", "key": key, "guild_id": str(guild_id), "origin": origin}
+		)
+
+	def remote(self, settings: GuildSettings, key: str) -> GuildSetting[Any]:
+		async def load(guild_id: int) -> Any:
+			self.loads += 1
+			return self.values[key].get(guild_id, self.defaults[key])
+
+		async def save(guild_id: int, value: Any) -> None:
+			await self.write(key, guild_id, value, settings.origin)
+
+		async def load_all() -> dict[int, Any]:
+			return dict(self.values[key])
+
+		return settings.add_remote(key, load, save, load_all=load_all)
+
+
+class Instance:
+	"""One bot process: its own caches, sharing the database, the API and the event bus with the others."""
+
+	def __init__(self, db: asyncpg.Pool, bus: LocalEventBus, api: FakeApi) -> None:
 		self.settings = GuildSettings(lambda: db, bus)
-		self.prefix: GuildSetting[Prefix] = self.settings.add(
-			"prefix", load_prefix, save_prefix, load_all=load_all_prefixes
-		)
-		self.locale: GuildSetting[str | None] = self.settings.add(
-			"locale", load_locale_override, save_locale_override, load_all=load_all_locale_overrides
-		)
+		self.prefix: GuildSetting[Prefix] = api.remote(self.settings, "prefix")
+		self.locale: GuildSetting[str | None] = api.remote(self.settings, "locale")
 		self.retention = retention_setting(self.settings)
 
 
@@ -47,9 +66,18 @@ async def settle() -> None:
 
 
 @pytest.fixture
-async def instances(db: asyncpg.Pool) -> tuple[Instance, Instance]:
-	bus = LocalEventBus()
-	a, b = Instance(db, bus), Instance(db, bus)
+def bus() -> LocalEventBus:
+	return LocalEventBus()
+
+
+@pytest.fixture
+def api(bus: LocalEventBus) -> FakeApi:
+	return FakeApi(bus)
+
+
+@pytest.fixture
+async def instances(db: asyncpg.Pool, bus: LocalEventBus, api: FakeApi) -> tuple[Instance, Instance]:
+	a, b = Instance(db, bus, api), Instance(db, bus, api)
 	for instance in (a, b):
 
 		async def handler(event: dict, settings: GuildSettings = instance.settings) -> None:
@@ -62,23 +90,37 @@ async def instances(db: asyncpg.Pool) -> tuple[Instance, Instance]:
 async def test_loading_a_new_guild_creates_its_row_with_database_defaults(db, instances):
 	a, _ = instances
 
-	assert await a.prefix.get(GUILD) == ("?!", True)
 	assert await a.retention.get(GUILD) == "keep"
-	assert await db.fetchval("SELECT count(*) FROM guilds WHERE guild_id = $1", GUILD) == 1
 	assert await db.fetchval("SELECT count(*) FROM mod_config WHERE guild_id = $1", GUILD) == 1
 
 
 async def test_set_persists_and_updates_the_writer_immediately(db, instances):
 	a, _ = instances
 
+	await a.retention.set(GUILD, "delete")
+
+	assert a.retention.cache[GUILD] == "delete"
+	assert await db.fetchval("SELECT case_retention FROM mod_config WHERE guild_id = $1", GUILD) == "delete"
+
+
+async def test_remote_set_updates_the_writer_and_leaves_announcing_to_the_api(instances, api, bus):
+	a, _ = instances
+	published: list[dict] = []
+
+	async def record(event: dict) -> None:
+		published.append(event)
+
+	await bus.subscribe(EVENTS_CHANNEL, record)
+
 	await a.prefix.set(GUILD, ("!", False))
+	await settle()
 
 	assert a.prefix.cache[GUILD] == ("!", False)
-	row = await db.fetchrow("SELECT prefix, mention FROM guilds WHERE guild_id = $1", GUILD)
-	assert (row["prefix"], row["mention"]) == ("!", False)
+	assert api.values["prefix"][GUILD] == ("!", False)
+	assert len(published) == 1  # the API's announcement only; the bot didn't announce again
 
 
-async def test_preloaded_setting_is_reloaded_on_other_instances(instances):
+async def test_preloaded_remote_setting_is_reloaded_on_other_instances(instances):
 	a, b = instances
 	await a.settings.preload()
 	await b.settings.preload()
@@ -91,6 +133,30 @@ async def test_preloaded_setting_is_reloaded_on_other_instances(instances):
 	await a.locale.set(GUILD, None)
 	await settle()
 	assert b.locale.cache[GUILD] is None
+
+
+async def test_dashboard_change_reaches_every_instance(instances, api):
+	a, b = instances
+	await a.settings.preload()
+	await b.settings.preload()
+
+	await api.write("prefix", GUILD, ("$", True), origin=None)
+	await settle()
+
+	assert a.prefix.cache[GUILD] == ("$", True)
+	assert b.prefix.cache[GUILD] == ("$", True)
+
+
+async def test_writer_skips_the_echo_of_its_own_remote_write(instances, api):
+	a, b = instances
+	await b.settings.preload()
+	await a.prefix.set(GUILD, ("!", True))
+	api.values["prefix"][GUILD] = ("?", True)  # changed behind everyone's back before the echo arrives
+	await settle()
+
+	# Had the writer handled the API's echo of its own write, it would have reloaded and seen "?".
+	assert a.prefix.cache[GUILD] == ("!", True)
+	assert b.prefix.cache[GUILD] == ("?", True)
 
 
 async def test_lazy_setting_is_dropped_on_other_instances_and_reloaded_on_next_get(instances):
@@ -114,9 +180,9 @@ async def test_writer_ignores_its_own_invalidation(db, instances):
 	assert a.retention.cache[GUILD] == "delete"
 
 
-async def test_preload_reads_every_guild(db, instances):
+async def test_preload_reads_every_guild(instances, api):
 	a, _ = instances
-	await db.execute("INSERT INTO guilds (guild_id, prefix, mention) VALUES (1, '!', true), (2, '$', false)")
+	api.values["prefix"] = {1: ("!", True), 2: ("$", False)}
 
 	await a.settings.preload()
 

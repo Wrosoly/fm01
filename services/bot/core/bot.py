@@ -6,6 +6,7 @@ import os
 import socket
 import sys
 import traceback
+import uuid
 from io import StringIO
 from logging import getLogger
 from pathlib import Path
@@ -23,12 +24,12 @@ from discord.utils import MISSING
 from helpers import custom_response, seconds_to_text
 
 from core import Command, Context, SlashCommandLocalizer, slash_localization, update_slash_localizations
+from core.api import ApiClient, ApiUnavailable
 from core.clustering import (
 	ClusterConfig,
 	EventBus,
 	InMemoryMessageBuffer,
 	InMemoryStateStore,
-	LocalEventBus,
 	MessageBuffer,
 	RedisMessageBuffer,
 	RedisPubSubBus,
@@ -42,17 +43,7 @@ from core.clustering import (
 )
 from core.config import Config
 from core.hybrid import FullAliasCommand, full_alias_commands
-from core.settings import (
-	GuildSetting,
-	GuildSettings,
-	Prefix,
-	load_all_locale_overrides,
-	load_all_prefixes,
-	load_locale_override,
-	load_prefix,
-	save_locale_override,
-	save_prefix,
-)
+from core.settings import GuildSetting, GuildSettings, Prefix, locale_override_setting, prefix_setting
 
 __all__ = ("Bot", "discover_cogs")
 
@@ -130,20 +121,19 @@ class Bot(commands.AutoShardedBot):
 			)
 		else:
 			self.state_store = InMemoryStateStore()
-			self.event_bus = LocalEventBus()
+			# The API announces guild setting changes on Redis, so even a standalone bot listens there.
+			self.event_bus = RedisPubSubBus.from_url(self.cluster_config.redis_url)
 			self.message_buffer = InMemoryMessageBuffer()
 			self.coordinator = StandaloneCoordinator()
 
 		self.message_logging_guilds: set[int] = set()
 		"""Guilds whose messages are buffered for deletion/edit logging; maintained by the log setting."""
 		self._health_task: asyncio.Task | None = None
-		self.settings = GuildSettings(lambda: self.db, self.event_bus)
-		self.prefix: GuildSetting[Prefix] = self.settings.add(
-			"prefix", load_prefix, save_prefix, load_all=load_all_prefixes
-		)
-		self.locale_override: GuildSetting[str | None] = self.settings.add(
-			"locale", load_locale_override, save_locale_override, load_all=load_all_locale_overrides
-		)
+		origin = uuid.uuid4().hex
+		self.api = ApiClient(os.getenv("API_URL", "http://localhost:8000"), os.getenv("API_INTERNAL_TOKEN", ""), origin)
+		self.settings = GuildSettings(lambda: self.db, self.event_bus, origin)
+		self.prefix: GuildSetting[Prefix] = prefix_setting(self.settings, self.api)
+		self.locale_override: GuildSetting[str | None] = locale_override_setting(self.settings, self.api)
 		self.prefix_cache = self.prefix.cache
 		self.locale_cache = self.locale_override.cache
 		self.custom_response = custom_response.CustomResponse(self)
@@ -347,6 +337,7 @@ class Bot(commands.AutoShardedBot):
 		await self.message_buffer.close()
 		await self.event_bus.close()
 		await self.state_store.close()
+		await self.api.close()
 
 		if self.session and not self.session.closed:
 			self.logger.debug("Closing aiohttp session...")
@@ -416,6 +407,14 @@ class Bot(commands.AutoShardedBot):
 
 		if isinstance(error, commands.HybridCommandError):
 			error = error.original
+
+		root: BaseException = error
+		while isinstance(root, (commands.CommandInvokeError, app_commands.CommandInvokeError)):
+			root = root.original
+		if isinstance(root, ApiUnavailable):
+			self.logger.warning(f"API unavailable during {command}: {root}")
+			await ctx.send("errors.api_unavailable", command=command)
+			return
 
 		match error:
 			case commands.MissingRequiredArgument():

@@ -9,7 +9,8 @@ This document defines architectural standards, technical conventions, and operat
 - **Runtime**: Python `>=3.12,<3.14`
 - **Package & Environment Manager**: `uv`
 - **Core Framework**: `discord.py >=2.3.2`, `discord-localization >=1.1.5`
-- **Data & Storage**: PostgreSQL 16 (`asyncpg`), schema managed by `services/migrations/` (Alembic), Redis 7 (`redis-py`)
+- **Data & Storage**: the backend API (`services/api/`) through the API client (`core/api.py`); PostgreSQL 16 (`asyncpg`) directly for tables not yet moved to the API, schema managed by `services/migrations/` (Alembic); Redis 7 (`redis-py`)
+- **Wire models**: `fm01_schemas` (`shared/schemas/`, a uv path dependency), Pydantic v2
 - **Media & Voice**: Lavalink v4 (`wavelink >=3.5.2`), Pillow (`pillow >=11.3.0`)
 - **Code Quality**:
   - Linter & Formatter: `ruff` (indent: tabs `\t`, line-length: 120, quotes: double `"`)
@@ -42,13 +43,14 @@ This document defines architectural standards, technical conventions, and operat
 
 #### `core/` (Foundational Abstractions)
 
-- `bot.py` (`Bot`): Subclasses `commands.AutoShardedBot`. Manages database connection pool (`self.db`), prefix cache, clustering coordinator, event bus, message logging buffer, and global error handling.
+- `api.py` (`ApiClient`): The API client, the bot's typed wrapper around the Internal API (`bot.api.economy`, `bot.api.settings`). Maps API error codes back to exceptions (`InsufficientFunds`, `ValueError`) and transport failures to `ApiUnavailable`, which the global error handler answers with `errors.api_unavailable`.
+- `bot.py` (`Bot`): Subclasses `commands.AutoShardedBot`. Manages the API client (`self.api`), database connection pool (`self.db`), prefix cache, clustering coordinator, event bus, message logging buffer, and global error handling.
 - `context.py` (`Context`): Subclasses `commands.Context`. Overrides `send()` to automatically intercept localization keys and format variables via `CustomResponse`.
 - `hybrid.py` (`command`, `group`, `HybridCommand`, `HybridGroup`): Custom command decorators automatically linking commands to the slash command localization tree.
 - `slash_localization.py` (`SlashCommandLocalizer`): Subclasses `app_commands.Translator` to dynamically translate slash command names and descriptions from `slash_localization/`.
 - `argument.py` & `command.py`: Serialization helpers converting Discord contexts/commands for formatted messages.
 - `config.py` (`Config`): Runtime configuration parser loading `config.yml`.
-- `settings.py` (`GuildSettings`, `GuildSetting`): Cached per-guild settings with cross-instance invalidation. Register feature settings here instead of keeping a cog-level cache.
+- `settings.py` (`GuildSettings`, `GuildSetting`): Cached per-guild settings with cross-instance invalidation. Register feature settings here instead of keeping a cog-level cache. Settings stored behind the API use `add_remote`; the API announces their changes, so the bot doesn't.
 - `locale.py` (`resolve_locale`): The single rule for which locale a response uses.
 - `clustering/`: Shard coordination (`ShardCoordinator`), gateway proxy connection (`gateway_proxy.py`), distributed state (`StateStore`), event pub/sub (`EventBus`), and audit log buffers (`MessageBuffer`).
 
@@ -74,7 +76,7 @@ Dataclasses decorated with `@dataclass(slots=True)` that wrap Discord objects (e
 - `automod.py`: Server protection rule engine (invite blocking, links, caps, spam, word filters).
 - `basic.py`: Core utility commands (`ping`, `uptime`).
 - `config.py` & `config_subcommands/`: Hierarchical CLI server settings management (`automod`, `join`, `leave`, `level`, `log`, `prefix`, `ticket`).
-- `economy.py`: Virtual economy system (`EconomyHelper`, `ShopItem`, balances, transactions).
+- `economy.py`: Virtual economy commands and the shop. Balances go through the Ledger in the API (`bot.api.economy`); the shop's own table is still queried directly.
 - `help.py`: Dynamic help system subclassing `commands.HelpCommand` with paginated views.
 - `info.py`: Server, user, role, and bot diagnostic inspection commands.
 - `join_leave.py`: Welcome/leave announcement handlers and autorole assignment.
@@ -124,9 +126,11 @@ Dataclasses decorated with `@dataclass(slots=True)` that wrap Discord objects (e
 - Only place utilities in `helpers/` if they are reused across multiple cogs or core subsystems.
 - Cog-specific models or helper functions must remain within their respective cog file.
 
-### 5. Database Schema & Migrations
+### 5. Data Access, Schema & Migrations
 
-- All database operations use `self.bot.db` (`asyncpg.Pool`).
+- Data whose domain has moved to the API (economy balances, prefix, locale override) is reached only through `self.bot.api`. Never query those tables directly.
+- Moving a domain: add its store and Internal API routes in `services/api/` (see its `AGENTS.md`), the wire models in `shared/schemas/`, then the matching methods on the API client, and remove the bot's queries.
+- Everything else still uses `self.bot.db` (`asyncpg.Pool`) until it moves.
 - The bot never runs migrations. Schema changes go in `services/migrations/` (see its `AGENTS.md`); the `migrations` Compose service applies them before the bot starts.
 - Never assume a schema change exists in the bot itself. Reference only tables and columns that the migrations service has already shipped.
 

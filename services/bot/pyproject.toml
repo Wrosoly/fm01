@@ -33,6 +33,8 @@ dependencies = [
     "chat-exporter>=3.1.0",
     "orjson>=3.10.0",
     "redis>=5.0.0",
+    "fm01-schemas",
+    "pydantic>=2.9",
 ]
 
 [dependency-groups]
@@ -47,6 +49,9 @@ dev = [
 packages = ["helpers"]
 
 [tool.uv]
+
+[tool.uv.sources]
+fm01-schemas = { path = "../../shared/schemas", editable = true }
 
 [tool.ruff]
 line-length = 120
@@ -67,6 +72,7 @@ convention = "google"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 pythonpath = ["."]
 markers = ["db: needs a throwaway PostgreSQL database (Docker)"]

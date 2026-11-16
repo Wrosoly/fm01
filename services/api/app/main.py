@@ -1,0 +1,95 @@
+"""The FastAPI application."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncGenerator, Callable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI
+
+from app.auth import require_internal
+from app.config import Settings
+from app.dashboard import routes as dashboard_routes
+from app.economy import routes as economy_routes
+from app.errors import ERROR_RESPONSES, install_error_handlers
+from app.settings import routes as settings_routes
+from app.state import AppState, build_state
+
+__all__ = ("app", "create_app")
+
+type StateFactory = Callable[[Settings], AbstractAsyncContextManager[AppState]]
+
+
+def create_app(config: Settings | None = None, state_factory: StateFactory = build_state) -> FastAPI:
+	"""Build the API app.
+
+	Args:
+		config: The configuration. Read from the environment at startup if omitted.
+		state_factory: Opens the app state for the app's lifetime.
+
+	Returns:
+		The app.
+	"""
+
+	@asynccontextmanager
+	async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+		"""Hold the app state open while the app runs.
+
+		Args:
+			app: The app.
+
+		Yields:
+			Nothing. The state is on ``app.state.fm01``.
+		"""
+		async with state_factory(config or Settings.from_env()) as state:
+			app.state.fm01 = state
+			yield
+
+	app = FastAPI(
+		title="fm01 API",
+		version="0.1.0",
+		lifespan=lifespan,
+		responses=ERROR_RESPONSES,
+		generate_unique_id_function=lambda route: route.name,  # readable operation names in the generated TS
+	)
+	install_error_handlers(app)
+
+	internal = APIRouter(prefix="/internal", dependencies=[Depends(require_internal)])
+	internal.include_router(economy_routes.internal)
+	internal.include_router(settings_routes.internal)
+
+	dashboard = APIRouter(prefix="/dashboard")
+	dashboard.include_router(dashboard_routes.router)
+	dashboard.include_router(settings_routes.dashboard)
+
+	app.include_router(internal, tags=["internal"])
+	app.include_router(dashboard, tags=["dashboard"])
+
+	@app.get("/health", tags=["health"])
+	async def health() -> dict[str, str]:
+		"""Report that the API is up.
+
+		\f
+		Returns:
+			``{"status": "ok"}``.
+		"""
+		return {"status": "ok"}
+
+	return app
+
+
+def _app() -> FastAPI:
+	"""Build the app Uvicorn serves.
+
+	Returns:
+		The app, with ``.env`` loaded and logging set up.
+	"""
+	load_dotenv()
+	logging.basicConfig(level=logging.INFO)
+	return create_app()
+
+
+app = _app()
+"""The ASGI entry point (``uvicorn app.main:app``)."""
