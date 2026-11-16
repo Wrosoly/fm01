@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -43,15 +44,27 @@ def test_guild_manager_rule():
 	assert not is_guild_manager({"owner": False, "permissions": "1024"})
 
 
-async def test_exchange_creates_a_session_storing_only_the_token_hash(api, discord):
+async def test_exchange_creates_a_session_storing_only_the_salted_hash(api, discord):
 	response = await api.client.post("/dashboard/auth/exchange", json={"code": "good-code", "redirect_uri": REDIRECT})
 
 	body = response.json()
 	assert body["user"] == {"id": str(USER_ID), "username": "alice", "global_name": "Alice", "avatar": None}
 	assert datetime.fromisoformat(body["expires_at"]) > datetime.now(UTC) + timedelta(days=29)
-	row = await api.db.fetchrow("SELECT id, access_token FROM dashboard_sessions")
-	assert row["id"] != body["token"]
+	session_id, secret = body["token"].split(".")
+	row = await api.db.fetchrow("SELECT * FROM dashboard_sessions")
+	assert row["id"] == session_id
+	assert row["token_hash"] == hashlib.sha256(bytes.fromhex(row["token_salt"]) + secret.encode()).hexdigest()
+	assert secret not in "".join(str(value) for value in row.values())
 	assert "access-1" not in row["access_token"]  # encrypted
+
+
+async def test_wrong_secret_for_a_real_session_is_unauthorized(api, discord):
+	auth = await sign_in(api)
+	session_id = auth["Authorization"].removeprefix("Bearer ").split(".")[0]
+
+	for token in (f"{session_id}.wrong", session_id, f"{session_id}."):
+		response = await api.client.get("/dashboard/me", headers={"Authorization": f"Bearer {token}"})
+		assert response.status_code == 401
 
 
 async def test_bad_code_is_unauthorized(api, discord):

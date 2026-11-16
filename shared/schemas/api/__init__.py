@@ -3,20 +3,20 @@
 TypeScript types are generated from the API's OpenAPI schema into ``shared/schemas/ts/``. Never edit those by hand.
 """
 
-from fm01_schemas.dashboard import DashboardUser, ManagedGuild, SessionExchange, SessionGrant
-from fm01_schemas.economy import (
+from api.dashboard import DashboardUser, ManagedGuild, SessionExchange, SessionGrant
+from api.economy import (
+	AddMoneyRequest,
 	Amount,
 	Balance,
-	CreditRequest,
-	DebitRequest,
 	LeaderboardEntry,
 	MoveRequest,
+	RemoveMoneyRequest,
 	TransferRequest,
 	Wallet,
 )
-from fm01_schemas.errors import ErrorBody, ErrorCode
-from fm01_schemas.events import EVENTS_CHANNEL, INVALIDATE_SETTING, InvalidateSetting
-from fm01_schemas.settings import (
+from api.errors import ErrorBody, ErrorCode
+from api.events import EVENTS_CHANNEL, INVALIDATE_SETTING, InvalidateSetting
+from api.settings import (
 	LOCALE_SETTING,
 	PREFIX_SETTING,
 	GuildLocale,
@@ -26,18 +26,17 @@ from fm01_schemas.settings import (
 	Prefix,
 	PrefixText,
 )
-from fm01_schemas.snowflake import Snowflake
+from api.snowflake import Snowflake
 
 __all__ = (
 	"EVENTS_CHANNEL",
 	"INVALIDATE_SETTING",
 	"LOCALE_SETTING",
 	"PREFIX_SETTING",
+	"AddMoneyRequest",
 	"Amount",
 	"Balance",
-	"CreditRequest",
 	"DashboardUser",
-	"DebitRequest",
 	"ErrorBody",
 	"ErrorCode",
 	"GuildLocale",
@@ -50,6 +49,7 @@ __all__ = (
 	"MoveRequest",
 	"Prefix",
 	"PrefixText",
+	"RemoveMoneyRequest",
 	"SessionExchange",
 	"SessionGrant",
 	"Snowflake",

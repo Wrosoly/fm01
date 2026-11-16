@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+from api import ErrorBody, ErrorCode
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fm01_schemas import ErrorBody, ErrorCode
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 __all__ = ("ERROR_RESPONSES", "ApiError", "install_error_handlers")

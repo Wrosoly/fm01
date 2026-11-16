@@ -19,9 +19,9 @@ from types import MappingProxyType
 from typing import Any
 
 import asyncpg
-from fm01_schemas import EVENTS_CHANNEL, INVALIDATE_SETTING, LOCALE_SETTING, PREFIX_SETTING, InvalidateSetting
-from fm01_schemas import Prefix as PrefixModel
 
+from api import EVENTS_CHANNEL, INVALIDATE_SETTING, LOCALE_SETTING, PREFIX_SETTING, InvalidateSetting
+from api import Prefix as PrefixModel
 from core.api import ApiClient
 from core.clustering.interfaces import EventBus
 
@@ -207,7 +207,7 @@ class GuildSettings:
 		"""Register a setting stored behind the Internal API. The API announces its changes, so `set` doesn't.
 
 		Args:
-			key: Unique name. Must match the key the API announces (``fm01_schemas`` names them).
+			key: Unique name. Must match the key the API announces (constants in the ``api`` package).
 			load: Reads one guild's value through the API client.
 			save: Writes one guild's value through the API client.
 			load_all: Reads every guild's value. Makes the setting preloaded.

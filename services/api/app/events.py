@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 import redis.asyncio as aioredis
-from fm01_schemas import EVENTS_CHANNEL, InvalidateSetting
+from api import EVENTS_CHANNEL, InvalidateSetting
 
 __all__ = ("Announcer",)
 

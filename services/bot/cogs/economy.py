@@ -93,7 +93,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 	async def work(self, ctx: Context):
 		assert ctx.guild is not None
 		amount: int = random.randint(300, 1500)
-		await self.ledger.credit(ctx.guild.id, ctx.author.id, amount)
+		await self.ledger.add_money(ctx.guild.id, ctx.author.id, amount)
 
 		await ctx.send("work", amount=amount)
 
@@ -101,7 +101,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 	async def crime(self, ctx: Context):
 		assert ctx.guild is not None
 		amount = random.randint(500, 2000)
-		await self.ledger.credit(ctx.guild.id, ctx.author.id, amount)
+		await self.ledger.add_money(ctx.guild.id, ctx.author.id, amount)
 
 		await ctx.send("crime", amount=amount)
 
@@ -110,7 +110,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 	async def daily(self, ctx: Context):
 		assert ctx.guild is not None
 		amount = 5000
-		await self.ledger.credit(ctx.guild.id, ctx.author.id, amount)
+		await self.ledger.add_money(ctx.guild.id, ctx.author.id, amount)
 
 		await ctx.send("allowance", amount=amount)
 
@@ -131,7 +131,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 		account: Literal["cash", "bank"] = "cash",
 	):
 		assert ctx.guild is not None
-		await self.ledger.credit(ctx.guild.id, member.id, amount, account)
+		await self.ledger.add_money(ctx.guild.id, member.id, amount, account)
 		await ctx.send("addmoney.success", amount=amount, member=member)
 
 	@command(user=False)
@@ -152,7 +152,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 	):
 		assert ctx.guild is not None
 		try:
-			await self.ledger.debit(ctx.guild.id, member.id, amount, account)
+			await self.ledger.remove_money(ctx.guild.id, member.id, amount, account)
 		except InsufficientFunds:
 			await ctx.send("removemoney.errors.balance")
 			return
@@ -169,11 +169,11 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 
 		amount = random.randint(200, 1000)
 		if random_helper.randbool():
-			await self.ledger.credit(ctx.guild.id, ctx.author.id, amount)
+			await self.ledger.add_money(ctx.guild.id, ctx.author.id, amount)
 			await ctx.send("luck.win", amount=amount)
 			return
 		try:
-			await self.ledger.debit(ctx.guild.id, ctx.author.id, amount)
+			await self.ledger.remove_money(ctx.guild.id, ctx.author.id, amount)
 		except InsufficientFunds:
 			await ctx.send("luck.errors.balance", amount=minimum_balance)
 			return
@@ -214,7 +214,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 			return
 
 		try:
-			await self.ledger.debit(ctx.guild.id, ctx.author.id, bet)
+			await self.ledger.remove_money(ctx.guild.id, ctx.author.id, bet)
 		except InsufficientFunds:
 			await ctx.send("slots.errors.balance")
 			return
@@ -224,7 +224,7 @@ class Economy(commands.GroupCog, name="Economy", group_name="economy"):
 
 		if results.count(results[0]) == len(results):
 			payout = bet * 2
-			await self.ledger.credit(ctx.guild.id, ctx.author.id, payout)
+			await self.ledger.add_money(ctx.guild.id, ctx.author.id, payout)
 			await ctx.send("slots.win", results=" ".join(results), amount=payout)
 		else:
 			bal = await self.ledger.balance(ctx.guild.id, ctx.author.id)
@@ -303,7 +303,7 @@ class Shop(commands.Cog, name="Shop"):
 			return
 
 		try:
-			await self.ledger.debit(ctx.guild.id, ctx.author.id, item.price)
+			await self.ledger.remove_money(ctx.guild.id, ctx.author.id, item.price)
 		except InsufficientFunds:
 			await ctx.send("shop.buy.errors.balance")
 			return
@@ -312,7 +312,7 @@ class Shop(commands.Cog, name="Shop"):
 			await ctx.author.add_roles(item.raw_role)
 		except discord.HTTPException:
 			try:
-				await self.ledger.credit(ctx.guild.id, ctx.author.id, item.price)
+				await self.ledger.add_money(ctx.guild.id, ctx.author.id, item.price)
 			except Exception:
 				logger.exception(f"Refund of {item.price} to {ctx.author.id} in {ctx.guild.id} failed")
 			await ctx.send("shop.buy.errors.role_failed", item=item)

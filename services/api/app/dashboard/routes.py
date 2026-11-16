@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from api import DashboardUser, ErrorCode, ManagedGuild, SessionExchange, SessionGrant
 from fastapi import APIRouter, status
-from fm01_schemas import DashboardUser, ErrorCode, ManagedGuild, SessionExchange, SessionGrant
 
 from app.auth import CurrentSession, State
 from app.dashboard.discord import REQUIRED_SCOPES

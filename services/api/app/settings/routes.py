@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from api import GuildLocale, GuildPrefix, LocaleOverride, Prefix, Snowflake
 from fastapi import APIRouter
-from fm01_schemas import GuildLocale, GuildPrefix, LocaleOverride, Prefix, Snowflake
 
 from app.auth import ManagedGuildId, Origin, State
 

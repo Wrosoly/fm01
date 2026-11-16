@@ -4,15 +4,15 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from fm01_schemas.snowflake import Snowflake
+from api.snowflake import Snowflake
 
 __all__ = (
+	"AddMoneyRequest",
 	"Amount",
 	"Balance",
-	"CreditRequest",
-	"DebitRequest",
 	"LeaderboardEntry",
 	"MoveRequest",
+	"RemoveMoneyRequest",
 	"TransferRequest",
 	"Wallet",
 )
@@ -48,7 +48,7 @@ class Balance(BaseModel):
 		return self.cash if wallet == "cash" else self.bank
 
 
-class CreditRequest(BaseModel):
+class AddMoneyRequest(BaseModel):
 	"""Add money to a member's wallet. Any debt is paid off first."""
 
 	user_id: Snowflake
@@ -56,7 +56,7 @@ class CreditRequest(BaseModel):
 	wallet: Wallet = "cash"
 
 
-class DebitRequest(BaseModel):
+class RemoveMoneyRequest(BaseModel):
 	"""Take money from a member's wallet. Cash can't go negative. The bank can, which records debt."""
 
 	user_id: Snowflake
@@ -74,7 +74,7 @@ class MoveRequest(BaseModel):
 
 
 class TransferRequest(BaseModel):
-	"""Move cash from one member to another, all or nothing."""
+	"""Move cash from one member to another. If it fails, neither balance changes."""
 
 	sender_id: Snowflake
 	recipient_id: Snowflake

@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import asyncpg
-from fm01_schemas import Balance, ErrorCode, LeaderboardEntry, Wallet
+from api import Balance, ErrorCode, LeaderboardEntry, Wallet
 
 from app.errors import ApiError
 
@@ -17,7 +17,7 @@ class Ledger:
 	"""Reads and changes members' balances.
 
 	Each write is one transaction with the accounts row-locked, and creates missing accounts. Cash never goes
-	negative. Only ``debit(..., wallet="bank")`` can make the bank negative (debt). Credits pay off debt first.
+	negative. Only ``remove_money(..., wallet="bank")`` can make the bank negative (debt). Added money pays off debt first.
 
 	Args:
 		db: The database pool.
@@ -41,7 +41,7 @@ class Ledger:
 		)
 		return Balance(cash=int(row["cash"]), bank=int(row["bank"])) if row else Balance()
 
-	async def credit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def add_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		"""Add money to a member's wallet, paying off debt first.
 
 		Args:
@@ -54,9 +54,9 @@ class Ledger:
 			The new balance.
 		"""
 		async with self._accounts(guild_id, user_id) as (conn, (bal,)):
-			return await self._write(conn, guild_id, user_id, _credited(bal, amount, wallet))
+			return await self._write(conn, guild_id, user_id, _added(bal, amount, wallet))
 
-	async def debit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def remove_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		"""Take money from a member's wallet.
 
 		Args:
@@ -74,7 +74,7 @@ class Ledger:
 		async with self._accounts(guild_id, user_id) as (conn, (bal,)):
 			if wallet == "cash" and bal.cash < amount:
 				raise ApiError(ErrorCode.INSUFFICIENT_FUNDS)
-			return await self._write(conn, guild_id, user_id, _debited(bal, amount, wallet))
+			return await self._write(conn, guild_id, user_id, _removed(bal, amount, wallet))
 
 	async def move(self, guild_id: int, user_id: int, amount: int, source: Wallet, target: Wallet) -> Balance:
 		"""Move money between a member's own wallets (deposit or withdraw).
@@ -95,10 +95,10 @@ class Ledger:
 		async with self._accounts(guild_id, user_id) as (conn, (bal,)):
 			if bal[source] < amount:
 				raise ApiError(ErrorCode.INSUFFICIENT_FUNDS)
-			return await self._write(conn, guild_id, user_id, _credited(_debited(bal, amount, source), amount, target))
+			return await self._write(conn, guild_id, user_id, _added(_removed(bal, amount, source), amount, target))
 
 	async def transfer(self, guild_id: int, sender_id: int, recipient_id: int, amount: int) -> None:
-		"""Give cash from one member to another, all or nothing.
+		"""Give cash from one member to another. If it fails, neither balance changes.
 
 		Args:
 			guild_id: The guild both accounts belong to.
@@ -114,8 +114,8 @@ class Ledger:
 		async with self._accounts(guild_id, sender_id, recipient_id) as (conn, (sender, recipient)):
 			if sender.cash < amount:
 				raise ApiError(ErrorCode.INSUFFICIENT_FUNDS)
-			await self._write(conn, guild_id, sender_id, _debited(sender, amount, "cash"))
-			await self._write(conn, guild_id, recipient_id, _credited(recipient, amount, "cash"))
+			await self._write(conn, guild_id, sender_id, _removed(sender, amount, "cash"))
+			await self._write(conn, guild_id, recipient_id, _added(recipient, amount, "cash"))
 
 	async def leaderboard(self, guild_id: int, limit: int) -> list[LeaderboardEntry]:
 		"""List a guild's richest members.
@@ -188,7 +188,7 @@ class Ledger:
 		return bal
 
 
-def _credited(bal: Balance, amount: int, wallet: Wallet) -> Balance:
+def _added(bal: Balance, amount: int, wallet: Wallet) -> Balance:
 	"""Add money to a balance, paying off debt first.
 
 	Args:
@@ -206,7 +206,7 @@ def _credited(bal: Balance, amount: int, wallet: Wallet) -> Balance:
 	return Balance(cash=bal.cash, bank=bank + rest)
 
 
-def _debited(bal: Balance, amount: int, wallet: Wallet) -> Balance:
+def _removed(bal: Balance, amount: int, wallet: Wallet) -> Balance:
 	"""Take money from a balance. Doesn't check that the wallet holds it.
 
 	Args:

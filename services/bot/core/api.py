@@ -9,10 +9,11 @@ import logging
 from typing import Any, TypeVar
 
 import aiohttp
-from fm01_schemas import (
+from pydantic import BaseModel, TypeAdapter, ValidationError
+
+from api import (
+	AddMoneyRequest,
 	Balance,
-	CreditRequest,
-	DebitRequest,
 	ErrorBody,
 	ErrorCode,
 	GuildLocale,
@@ -21,10 +22,10 @@ from fm01_schemas import (
 	LocaleOverride,
 	MoveRequest,
 	Prefix,
+	RemoveMoneyRequest,
 	TransferRequest,
 	Wallet,
 )
-from pydantic import BaseModel, TypeAdapter, ValidationError
 
 __all__ = ("ApiClient", "ApiError", "ApiUnavailable", "EconomyApi", "InsufficientFunds", "SettingsApi")
 
@@ -192,7 +193,7 @@ class EconomyApi:
 		"""
 		return await self._client.request("GET", f"/guilds/{guild_id}/economy/accounts/{user_id}", Balance)
 
-	async def credit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def add_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		"""Add money to a member's wallet, paying off debt first.
 
 		Args:
@@ -204,10 +205,10 @@ class EconomyApi:
 		Returns:
 			The new balance.
 		"""
-		body = CreditRequest(user_id=user_id, amount=amount, wallet=wallet)
-		return await self._client.request("POST", f"/guilds/{guild_id}/economy/credit", Balance, body=body)
+		body = AddMoneyRequest(user_id=user_id, amount=amount, wallet=wallet)
+		return await self._client.request("POST", f"/guilds/{guild_id}/economy/add-money", Balance, body=body)
 
-	async def debit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def remove_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		"""Take money from a member's account.
 
 		Args:
@@ -222,8 +223,8 @@ class EconomyApi:
 		Raises:
 			InsufficientFunds: ``wallet`` is ``"cash"`` and the member holds less than ``amount``.
 		"""
-		body = DebitRequest(user_id=user_id, amount=amount, wallet=wallet)
-		return await self._client.request("POST", f"/guilds/{guild_id}/economy/debit", Balance, body=body)
+		body = RemoveMoneyRequest(user_id=user_id, amount=amount, wallet=wallet)
+		return await self._client.request("POST", f"/guilds/{guild_id}/economy/remove-money", Balance, body=body)
 
 	async def move(self, guild_id: int, user_id: int, amount: int, source: Wallet, target: Wallet) -> Balance:
 		"""Move money between a member's own wallets (deposit or withdraw).
@@ -245,7 +246,7 @@ class EconomyApi:
 		return await self._client.request("POST", f"/guilds/{guild_id}/economy/move", Balance, body=body)
 
 	async def transfer(self, guild_id: int, sender_id: int, recipient_id: int, amount: int) -> None:
-		"""Give cash from one member to another, all or nothing.
+		"""Give cash from one member to another. If it fails, neither balance changes.
 
 		Args:
 			guild_id: The guild both accounts belong to.

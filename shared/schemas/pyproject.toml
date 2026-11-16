@@ -11,7 +11,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["fm01_schemas"]
+packages = ["api"]
 
 [tool.ruff]
 line-length = 120

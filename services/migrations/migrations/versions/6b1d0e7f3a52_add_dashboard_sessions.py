@@ -23,8 +23,10 @@ def upgrade() -> None:
 	"""Upgrade schema."""
 	op.create_table(
 		"dashboard_sessions",
-		# SHA-256 (hex) of the session token; the token itself is never stored.
+		# The public half of the session token (<id>.<secret>). The secret is stored only as a salted SHA-256 hash.
 		sa.Column("id", sa.Text(), primary_key=True),
+		sa.Column("token_salt", sa.Text(), nullable=False),
+		sa.Column("token_hash", sa.Text(), nullable=False),
 		sa.Column("user_id", sa.Numeric(), nullable=False),
 		sa.Column("user_profile", postgresql.JSONB(), nullable=False),
 		# Discord OAuth2 tokens, Fernet-encrypted with SESSION_ENCRYPTION_KEY.

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncpg
-from fm01_schemas import LOCALE_SETTING, PREFIX_SETTING, GuildLocale, GuildPrefix, LocaleOverride, Prefix
+from api import LOCALE_SETTING, PREFIX_SETTING, GuildLocale, GuildPrefix, LocaleOverride, Prefix
 
 from app.events import Announcer
 

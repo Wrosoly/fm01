@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import tomllib
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
@@ -20,6 +22,16 @@ from app.state import AppState, build_state
 __all__ = ("app", "create_app")
 
 type StateFactory = Callable[[Settings], AbstractAsyncContextManager[AppState]]
+
+
+def _version() -> str:
+	"""Read the API's version from ``pyproject.toml``.
+
+	Returns:
+		The ``project.version`` value.
+	"""
+	pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+	return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
 
 
 def create_app(config: Settings | None = None, state_factory: StateFactory = build_state) -> FastAPI:
@@ -49,7 +61,7 @@ def create_app(config: Settings | None = None, state_factory: StateFactory = bui
 
 	app = FastAPI(
 		title="fm01 API",
-		version="0.1.0",
+		version=_version(),
 		lifespan=lifespan,
 		responses=ERROR_RESPONSES,
 		generate_unique_id_function=lambda route: route.name,  # readable operation names in the generated TS

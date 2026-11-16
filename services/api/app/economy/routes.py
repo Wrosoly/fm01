@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
+from api import AddMoneyRequest, Balance, LeaderboardEntry, MoveRequest, RemoveMoneyRequest, Snowflake, TransferRequest
 from fastapi import APIRouter, Query, status
-from fm01_schemas import Balance, CreditRequest, DebitRequest, LeaderboardEntry, MoveRequest, Snowflake, TransferRequest
 
 from app.auth import State
 
@@ -30,8 +30,8 @@ async def balance(guild_id: Snowflake, user_id: Snowflake, state: State) -> Bala
 	return await state.ledger.balance(guild_id, user_id)
 
 
-@internal.post("/credit")
-async def credit(guild_id: Snowflake, body: CreditRequest, state: State) -> Balance:
+@internal.post("/add-money")
+async def add_money(guild_id: Snowflake, body: AddMoneyRequest, state: State) -> Balance:
 	"""Add money to a member's wallet, paying off debt first.
 
 	\f
@@ -43,11 +43,11 @@ async def credit(guild_id: Snowflake, body: CreditRequest, state: State) -> Bala
 	Returns:
 		The new balance.
 	"""
-	return await state.ledger.credit(guild_id, body.user_id, body.amount, body.wallet)
+	return await state.ledger.add_money(guild_id, body.user_id, body.amount, body.wallet)
 
 
-@internal.post("/debit")
-async def debit(guild_id: Snowflake, body: DebitRequest, state: State) -> Balance:
+@internal.post("/remove-money")
+async def remove_money(guild_id: Snowflake, body: RemoveMoneyRequest, state: State) -> Balance:
 	"""Take money from a member's wallet. The bank may go negative.
 
 	\f
@@ -62,7 +62,7 @@ async def debit(guild_id: Snowflake, body: DebitRequest, state: State) -> Balanc
 	Raises:
 		ApiError: ``insufficient_funds`` if the member holds less cash than the amount.
 	"""
-	return await state.ledger.debit(guild_id, body.user_id, body.amount, body.wallet)
+	return await state.ledger.remove_money(guild_id, body.user_id, body.amount, body.wallet)
 
 
 @internal.post("/move")
@@ -86,7 +86,7 @@ async def move(guild_id: Snowflake, body: MoveRequest, state: State) -> Balance:
 
 @internal.post("/transfer", status_code=status.HTTP_204_NO_CONTENT)
 async def transfer(guild_id: Snowflake, body: TransferRequest, state: State) -> None:
-	"""Give cash from one member to another, all or nothing.
+	"""Give cash from one member to another. If it fails, neither balance changes.
 
 	\f
 	Args:

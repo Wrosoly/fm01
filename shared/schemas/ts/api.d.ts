@@ -174,7 +174,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/internal/guilds/{guild_id}/economy/credit": {
+    "/internal/guilds/{guild_id}/economy/add-money": {
         parameters: {
             query?: never;
             header?: never;
@@ -184,30 +184,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Credit
+         * Add Money
          * @description Add money to a member's wallet, paying off debt first.
          */
-        post: operations["credit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/internal/guilds/{guild_id}/economy/debit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Debit
-         * @description Take money from a member's wallet. The bank may go negative.
-         */
-        post: operations["debit"];
+        post: operations["add_money"];
         delete?: never;
         options?: never;
         head?: never;
@@ -254,6 +234,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/guilds/{guild_id}/economy/remove-money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove Money
+         * @description Take money from a member's wallet. The bank may go negative.
+         */
+        post: operations["remove_money"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/guilds/{guild_id}/economy/transfer": {
         parameters: {
             query?: never;
@@ -265,7 +265,7 @@ export interface paths {
         put?: never;
         /**
          * Transfer
-         * @description Give cash from one member to another, all or nothing.
+         * @description Give cash from one member to another. If it fails, neither balance changes.
          */
         post: operations["transfer"];
         delete?: never;
@@ -367,6 +367,25 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AddMoneyRequest
+         * @description Add money to a member's wallet. Any debt is paid off first.
+         */
+        AddMoneyRequest: {
+            /** Amount */
+            amount: number;
+            /**
+             * User Id
+             * @example 1234567890123456789
+             */
+            user_id: string;
+            /**
+             * Wallet
+             * @default cash
+             * @enum {string}
+             */
+            wallet: "cash" | "bank";
+        };
+        /**
          * Balance
          * @description A member's money in one guild. ``bank`` is negative while the member is in debt.
          */
@@ -381,25 +400,6 @@ export interface components {
              * @default 0
              */
             cash: number;
-        };
-        /**
-         * CreditRequest
-         * @description Add money to a member's wallet. Any debt is paid off first.
-         */
-        CreditRequest: {
-            /** Amount */
-            amount: number;
-            /**
-             * User Id
-             * @example 1234567890123456789
-             */
-            user_id: string;
-            /**
-             * Wallet
-             * @default cash
-             * @enum {string}
-             */
-            wallet: "cash" | "bank";
         };
         /**
          * DashboardUser
@@ -417,25 +417,6 @@ export interface components {
             id: string;
             /** Username */
             username: string;
-        };
-        /**
-         * DebitRequest
-         * @description Take money from a member's wallet. Cash can't go negative. The bank can, which records debt.
-         */
-        DebitRequest: {
-            /** Amount */
-            amount: number;
-            /**
-             * User Id
-             * @example 1234567890123456789
-             */
-            user_id: string;
-            /**
-             * Wallet
-             * @default cash
-             * @enum {string}
-             */
-            wallet: "cash" | "bank";
         };
         /**
          * ErrorBody
@@ -564,6 +545,25 @@ export interface components {
             prefix: string;
         };
         /**
+         * RemoveMoneyRequest
+         * @description Take money from a member's wallet. Cash can't go negative. The bank can, which records debt.
+         */
+        RemoveMoneyRequest: {
+            /** Amount */
+            amount: number;
+            /**
+             * User Id
+             * @example 1234567890123456789
+             */
+            user_id: string;
+            /**
+             * Wallet
+             * @default cash
+             * @enum {string}
+             */
+            wallet: "cash" | "bank";
+        };
+        /**
          * SessionExchange
          * @description The Discord OAuth2 authorization code the dashboard received, to trade for a dashboard session.
          */
@@ -589,7 +589,7 @@ export interface components {
         };
         /**
          * TransferRequest
-         * @description Move cash from one member to another, all or nothing.
+         * @description Move cash from one member to another. If it fails, neither balance changes.
          */
         TransferRequest: {
             /** Amount */
@@ -1017,7 +1017,7 @@ export interface operations {
             };
         };
     };
-    credit: {
+    add_money: {
         parameters: {
             query?: never;
             header?: never;
@@ -1028,51 +1028,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreditRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Balance"];
-                };
-            };
-            /** @description The request failed. `code` says why. */
-            "4XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-            /** @description The API or Discord failed. */
-            "5XX": {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorBody"];
-                };
-            };
-        };
-    };
-    debit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                guild_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DebitRequest"];
+                "application/json": components["schemas"]["AddMoneyRequest"];
             };
         };
         responses: {
@@ -1191,6 +1147,50 @@ export interface operations {
             };
         };
     };
+    remove_money: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoveMoneyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Balance"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     transfer: {
         parameters: {
             query?: never;
@@ -1277,7 +1277,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The calling bot instance. Echoed in the change events it causes, so it can skip them. */
+                /** @description The calling bot instance's ID. Change events from this request carry it, so that instance ignores them. */
                 "X-Fm01-Origin"?: string | null;
             };
             path: {
@@ -1364,7 +1364,7 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description The calling bot instance. Echoed in the change events it causes, so it can skip them. */
+                /** @description The calling bot instance's ID. Change events from this request carry it, so that instance ignores them. */
                 "X-Fm01-Origin"?: string | null;
             };
             path: {

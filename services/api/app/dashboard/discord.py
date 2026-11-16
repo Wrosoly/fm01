@@ -7,25 +7,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from fm01_schemas import DashboardUser, ErrorCode
+from api import DashboardUser, ErrorCode
 
 from app.errors import ApiError
 
-__all__ = ("REQUIRED_SCOPES", "DiscordClient", "TokenSet")
+__all__ = ("REQUIRED_SCOPES", "DiscordClient", "OAuthTokenSet")
 
 REQUIRED_SCOPES = frozenset({"identify", "guilds"})
 
 
 @dataclass(frozen=True, slots=True)
-class TokenSet:
-	"""A user's Discord OAuth2 tokens.
-
-	Attributes:
-		access_token: The access token.
-		refresh_token: The refresh token.
-		expires_at: When the access token expires.
-		scopes: The granted scopes.
-	"""
+class OAuthTokenSet:
+	"""A user's Discord OAuth2 tokens."""
 
 	access_token: str
 	refresh_token: str
@@ -53,7 +46,7 @@ class DiscordClient:
 		self._client_secret = client_secret
 		self._bot_token = bot_token
 
-	async def exchange_code(self, code: str, redirect_uri: str) -> TokenSet:
+	async def exchange_code(self, code: str, redirect_uri: str) -> OAuthTokenSet:
 		"""Trade an OAuth2 authorization code for the user's tokens.
 
 		Args:
@@ -68,14 +61,11 @@ class DiscordClient:
 		"""
 		return await self._token({"grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri})
 
-	async def refresh(self, refresh_token: str) -> TokenSet:
+	async def refresh(self, refresh_token: str) -> OAuthTokenSet:
 		"""Get new tokens with a refresh token.
 
 		Args:
 			refresh_token: The refresh token.
-
-		Returns:
-			The new tokens.
 
 		Raises:
 			ApiError: ``unauthorized`` if the refresh token is no longer valid.
@@ -99,9 +89,6 @@ class DiscordClient:
 
 	async def current_user(self, access_token: str) -> DashboardUser:
 		"""Get the profile of an access token's user.
-
-		Args:
-			access_token: The user's access token.
 
 		Returns:
 			The user's profile.
@@ -131,11 +118,8 @@ class DiscordClient:
 	async def bot_in_guild(self, guild_id: int) -> bool:
 		"""Check whether the bot is a member of a guild.
 
-		Args:
-			guild_id: The guild.
-
 		Returns:
-			Whether the bot is a member.
+			Whether the bot is a member of the guild.
 
 		Raises:
 			ApiError: ``discord_unavailable`` if Discord fails.
@@ -143,16 +127,17 @@ class DiscordClient:
 		try:
 			await self._get(f"/guilds/{guild_id}", f"Bot {self._bot_token}", user_call=False)
 		except ApiError as exc:
-			if exc.code is ErrorCode.NOT_FOUND:
+			# Discord answers 403 (Missing Access) for a guild the bot isn't in, and 404 for an unknown guild.
+			if exc.code in (ErrorCode.FORBIDDEN, ErrorCode.NOT_FOUND):
 				return False
 			raise
 		return True
 
-	async def _token(self, form: dict[str, str]) -> TokenSet:
+	async def _token(self, form: dict[str, str]) -> OAuthTokenSet:
 		"""Call the OAuth2 token endpoint.
 
 		Args:
-			form: The form fields to send.
+			form: The token request body: ``grant_type`` and the fields that grant needs.
 
 		Returns:
 			The tokens Discord returned.
@@ -171,7 +156,7 @@ class DiscordClient:
 		if response.is_error:
 			raise ApiError(ErrorCode.DISCORD_UNAVAILABLE, f"Discord answered {response.status_code}")
 		data = response.json()
-		return TokenSet(
+		return OAuthTokenSet(
 			access_token=data["access_token"],
 			refresh_token=data["refresh_token"],
 			expires_at=datetime.now(UTC) + timedelta(seconds=int(data["expires_in"])),
@@ -190,7 +175,8 @@ class DiscordClient:
 			The JSON body.
 
 		Raises:
-			ApiError: ``unauthorized`` on a 401 for user calls. ``not_found`` on a 403 or 404 for bot calls.
+			ApiError: ``unauthorized`` on a 401 for user calls. ``forbidden`` on a 403 and ``not_found`` on a 404 for
+				bot calls.
 		"""
 		try:
 			response = await self._http.get(f"{self._base}{path}", headers={"Authorization": authorization})
@@ -198,7 +184,9 @@ class DiscordClient:
 			raise ApiError(ErrorCode.DISCORD_UNAVAILABLE, "Discord could not be reached") from exc
 		if response.status_code == 401 and user_call:
 			raise ApiError(ErrorCode.UNAUTHORIZED, "Discord no longer accepts this sign-in")
-		if response.status_code in (403, 404) and not user_call:
+		if response.status_code == 403 and not user_call:
+			raise ApiError(ErrorCode.FORBIDDEN, "Discord denied the bot access")
+		if response.status_code == 404 and not user_call:
 			raise ApiError(ErrorCode.NOT_FOUND)
 		if response.is_error:
 			raise ApiError(ErrorCode.DISCORD_UNAVAILABLE, f"Discord answered {response.status_code}")

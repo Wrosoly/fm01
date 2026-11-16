@@ -10,7 +10,7 @@ This document defines architectural standards, technical conventions, and operat
 - **Package & Environment Manager**: `uv`
 - **Core Framework**: `discord.py >=2.3.2`, `discord-localization >=1.1.5`
 - **Data & Storage**: the backend API (`services/api/`) through the API client (`core/api.py`); PostgreSQL 16 (`asyncpg`) directly for tables not yet moved to the API, schema managed by `services/migrations/` (Alembic); Redis 7 (`redis-py`)
-- **Wire models**: `fm01_schemas` (`shared/schemas/`, a uv path dependency), Pydantic v2
+- **Wire models**: package `api` (`shared/schemas/api/`, a uv path dependency), Pydantic v2
 - **Media & Voice**: Lavalink v4 (`wavelink >=3.5.2`), Pillow (`pillow >=11.3.0`)
 - **Code Quality**:
   - Linter & Formatter: `ruff` (indent: tabs `\t`, line-length: 120, quotes: double `"`)

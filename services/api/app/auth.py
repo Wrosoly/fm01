@@ -5,9 +5,9 @@ from __future__ import annotations
 import hmac
 from typing import Annotated
 
+from api import ErrorCode, Snowflake
 from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fm01_schemas import ErrorCode, Snowflake
 
 from app.dashboard.sessions import Session
 from app.errors import ApiError
@@ -56,7 +56,7 @@ Origin = Annotated[
 	str | None,
 	Header(
 		alias="X-Fm01-Origin",
-		description="The calling bot instance. Echoed in the change events it causes, so it can skip them.",
+		description="The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
 	),
 ]
 

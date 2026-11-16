@@ -1,24 +1,7 @@
 {
   "components": {
     "schemas": {
-      "Balance": {
-        "description": "A member's money in one guild. ``bank`` is negative while the member is in debt.",
-        "properties": {
-          "bank": {
-            "default": 0,
-            "title": "Bank",
-            "type": "integer"
-          },
-          "cash": {
-            "default": 0,
-            "title": "Cash",
-            "type": "integer"
-          }
-        },
-        "title": "Balance",
-        "type": "object"
-      },
-      "CreditRequest": {
+      "AddMoneyRequest": {
         "description": "Add money to a member's wallet. Any debt is paid off first.",
         "properties": {
           "amount": {
@@ -49,7 +32,24 @@
           "user_id",
           "amount"
         ],
-        "title": "CreditRequest",
+        "title": "AddMoneyRequest",
+        "type": "object"
+      },
+      "Balance": {
+        "description": "A member's money in one guild. ``bank`` is negative while the member is in debt.",
+        "properties": {
+          "bank": {
+            "default": 0,
+            "title": "Bank",
+            "type": "integer"
+          },
+          "cash": {
+            "default": 0,
+            "title": "Cash",
+            "type": "integer"
+          }
+        },
+        "title": "Balance",
         "type": "object"
       },
       "DashboardUser": {
@@ -95,40 +95,6 @@
           "username"
         ],
         "title": "DashboardUser",
-        "type": "object"
-      },
-      "DebitRequest": {
-        "description": "Take money from a member's wallet. Cash can't go negative. The bank can, which records debt.",
-        "properties": {
-          "amount": {
-            "exclusiveMaximum": 9.223372036854776e+18,
-            "exclusiveMinimum": 0.0,
-            "title": "Amount",
-            "type": "integer"
-          },
-          "user_id": {
-            "examples": [
-              "1234567890123456789"
-            ],
-            "pattern": "^[0-9]{1,20}$",
-            "title": "User Id",
-            "type": "string"
-          },
-          "wallet": {
-            "default": "cash",
-            "enum": [
-              "cash",
-              "bank"
-            ],
-            "title": "Wallet",
-            "type": "string"
-          }
-        },
-        "required": [
-          "user_id",
-          "amount"
-        ],
-        "title": "DebitRequest",
         "type": "object"
       },
       "ErrorBody": {
@@ -366,6 +332,40 @@
         "title": "Prefix",
         "type": "object"
       },
+      "RemoveMoneyRequest": {
+        "description": "Take money from a member's wallet. Cash can't go negative. The bank can, which records debt.",
+        "properties": {
+          "amount": {
+            "exclusiveMaximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "type": "integer"
+          },
+          "user_id": {
+            "examples": [
+              "1234567890123456789"
+            ],
+            "pattern": "^[0-9]{1,20}$",
+            "title": "User Id",
+            "type": "string"
+          },
+          "wallet": {
+            "default": "cash",
+            "enum": [
+              "cash",
+              "bank"
+            ],
+            "title": "Wallet",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "amount"
+        ],
+        "title": "RemoveMoneyRequest",
+        "type": "object"
+      },
       "SessionExchange": {
         "description": "The Discord OAuth2 authorization code the dashboard received, to trade for a dashboard session.",
         "properties": {
@@ -410,7 +410,7 @@
         "type": "object"
       },
       "TransferRequest": {
-        "description": "Move cash from one member to another, all or nothing.",
+        "description": "Move cash from one member to another. If it fails, neither balance changes.",
         "properties": {
           "amount": {
             "exclusiveMaximum": 9.223372036854776e+18,
@@ -1041,10 +1041,10 @@
         ]
       }
     },
-    "/internal/guilds/{guild_id}/economy/credit": {
+    "/internal/guilds/{guild_id}/economy/add-money": {
       "post": {
         "description": "Add money to a member's wallet, paying off debt first.",
-        "operationId": "credit",
+        "operationId": "add_money",
         "parameters": [
           {
             "in": "path",
@@ -1064,7 +1064,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreditRequest"
+                "$ref": "#/components/schemas/AddMoneyRequest"
               }
             }
           },
@@ -1107,80 +1107,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Credit",
-        "tags": [
-          "internal",
-          "economy"
-        ]
-      }
-    },
-    "/internal/guilds/{guild_id}/economy/debit": {
-      "post": {
-        "description": "Take money from a member's wallet. The bank may go negative.",
-        "operationId": "debit",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "guild_id",
-            "required": true,
-            "schema": {
-              "examples": [
-                "1234567890123456789"
-              ],
-              "pattern": "^[0-9]{1,20}$",
-              "title": "Guild Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DebitRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Balance"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "4XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            },
-            "description": "The request failed. `code` says why."
-          },
-          "5XX": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorBody"
-                }
-              }
-            },
-            "description": "The API or Discord failed."
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Debit",
+        "summary": "Add Money",
         "tags": [
           "internal",
           "economy"
@@ -1339,9 +1266,82 @@
         ]
       }
     },
+    "/internal/guilds/{guild_id}/economy/remove-money": {
+      "post": {
+        "description": "Take money from a member's wallet. The bank may go negative.",
+        "operationId": "remove_money",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveMoneyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Balance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Money",
+        "tags": [
+          "internal",
+          "economy"
+        ]
+      }
+    },
     "/internal/guilds/{guild_id}/economy/transfer": {
       "post": {
-        "description": "Give cash from one member to another, all or nothing.",
+        "description": "Give cash from one member to another. If it fails, neither balance changes.",
         "operationId": "transfer",
         "parameters": [
           {
@@ -1485,7 +1485,7 @@
             }
           },
           {
-            "description": "The calling bot instance. Echoed in the change events it causes, so it can skip them.",
+            "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
             "in": "header",
             "name": "X-Fm01-Origin",
             "required": false,
@@ -1498,7 +1498,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The calling bot instance. Echoed in the change events it causes, so it can skip them.",
+              "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
               "title": "X-Fm01-Origin"
             }
           }
@@ -1637,7 +1637,7 @@
             }
           },
           {
-            "description": "The calling bot instance. Echoed in the change events it causes, so it can skip them.",
+            "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
             "in": "header",
             "name": "X-Fm01-Origin",
             "required": false,
@@ -1650,7 +1650,7 @@
                   "type": "null"
                 }
               ],
-              "description": "The calling bot instance. Echoed in the change events it causes, so it can skip them.",
+              "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
               "title": "X-Fm01-Origin"
             }
           }

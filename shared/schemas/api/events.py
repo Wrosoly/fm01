@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from fm01_schemas.snowflake import Snowflake
+from api.snowflake import Snowflake
 
 __all__ = ("EVENTS_CHANNEL", "INVALIDATE_SETTING", "InvalidateSetting")
 

@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from fm01_schemas.snowflake import Snowflake
+from api.snowflake import Snowflake
 
 __all__ = ("DashboardUser", "ManagedGuild", "SessionExchange", "SessionGrant")
 

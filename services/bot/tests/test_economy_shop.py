@@ -8,7 +8,8 @@ import asyncpg
 import discord
 import pytest
 from cogs.economy import InsufficientFunds, Shop
-from fm01_schemas import Balance, Wallet
+
+from api import Balance, Wallet
 
 GUILD = 1
 ALICE = 10
@@ -23,12 +24,12 @@ class FakeLedger:
 	async def balance(self, guild_id: int, user_id: int) -> Balance:
 		return self.balances.get(user_id, Balance())
 
-	async def credit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def add_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		bal = await self.balance(guild_id, user_id)
 		self.balances[user_id] = bal.model_copy(update={wallet: bal[wallet] + amount})
 		return self.balances[user_id]
 
-	async def debit(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
+	async def remove_money(self, guild_id: int, user_id: int, amount: int, wallet: Wallet = "cash") -> Balance:
 		bal = await self.balance(guild_id, user_id)
 		if wallet == "cash" and bal.cash < amount:
 			raise InsufficientFunds
@@ -65,7 +66,7 @@ async def _add_vip(db: asyncpg.Pool) -> None:
 async def test_buy_charges_then_grants(db):
 	await _add_vip(db)
 	ledger = FakeLedger()
-	await ledger.credit(GUILD, ALICE, 150)
+	await ledger.add_money(GUILD, ALICE, 150)
 	ctx = _buy_ctx(AsyncMock())
 	shop = _shop(db, ledger)
 
@@ -93,7 +94,7 @@ async def test_buy_refunds_when_the_role_cannot_be_given(db):
 	"""Regression: the role used to be granted before charging, so a failed charge meant a free role."""
 	await _add_vip(db)
 	ledger = FakeLedger()
-	await ledger.credit(GUILD, ALICE, 150)
+	await ledger.add_money(GUILD, ALICE, 150)
 	ctx = _buy_ctx(AsyncMock(side_effect=discord.Forbidden(MagicMock(status=403), "missing permissions")))
 	shop = _shop(db, ledger)
 

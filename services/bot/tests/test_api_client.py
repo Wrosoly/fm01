@@ -10,7 +10,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 from core.api import ApiClient, ApiError, ApiUnavailable, InsufficientFunds
-from fm01_schemas import Balance, Prefix
+
+from api import Balance, Prefix
 
 BIG = 1234567890123456789  # loses precision as a JavaScript number
 
@@ -53,15 +54,15 @@ async def stand_in() -> AsyncIterator[tuple[StandIn, ApiClient]]:
 		await server.close()
 
 
-async def test_credit_sends_snowflakes_as_strings_with_token_and_origin(stand_in):
+async def test_add_money_sends_snowflakes_as_strings_with_token_and_origin(stand_in):
 	fake, client = stand_in
 	fake.body = {"cash": 50, "bank": 0}
 
-	balance = await client.economy.credit(7, BIG, 50, "bank")
+	balance = await client.economy.add_money(7, BIG, 50, "bank")
 
 	assert balance == Balance(cash=50)
 	request = fake.requests[0]
-	assert (request["method"], request["path"]) == ("POST", "/internal/guilds/7/economy/credit")
+	assert (request["method"], request["path"]) == ("POST", "/internal/guilds/7/economy/add-money")
 	assert request["json"] == {"user_id": str(BIG), "amount": 50, "wallet": "bank"}
 	assert request["headers"]["Authorization"] == "Bearer secret"
 	assert request["headers"]["X-Fm01-Origin"] == "instance-a"
@@ -82,7 +83,7 @@ async def test_insufficient_funds_is_raised_as_the_cogs_exception(stand_in):
 	fake.status, fake.body = 409, {"code": "insufficient_funds", "message": "insufficient funds"}
 
 	with pytest.raises(InsufficientFunds):
-		await client.economy.debit(7, 1, 10)
+		await client.economy.remove_money(7, 1, 10)
 
 
 async def test_self_transfer_is_refused_without_a_request(stand_in):

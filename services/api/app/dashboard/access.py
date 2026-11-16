@@ -6,9 +6,9 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
-from fm01_schemas import ErrorCode, ManagedGuild
+from api import ErrorCode, ManagedGuild
 
-from app.dashboard.discord import DiscordClient, TokenSet
+from app.dashboard.discord import DiscordClient, OAuthTokenSet
 from app.dashboard.sessions import Session, SessionStore
 from app.errors import ApiError
 
@@ -124,7 +124,7 @@ class GuildAccess:
 		if session.discord.expires_at - _REFRESH_MARGIN > datetime.now(UTC):
 			return session.discord.access_token
 		try:
-			tokens: TokenSet = await self._discord.refresh(session.discord.refresh_token)
+			tokens: OAuthTokenSet = await self._discord.refresh(session.discord.refresh_token)
 		except ApiError as exc:
 			if exc.code is ErrorCode.UNAUTHORIZED:
 				await self._sessions.revoke(session.id)

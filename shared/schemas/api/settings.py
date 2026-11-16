@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-from fm01_schemas.snowflake import Snowflake
+from api.snowflake import Snowflake
 
 __all__ = (
 	"LOCALE_SETTING",

@@ -1,20 +1,22 @@
 """The dashboard session store.
 
-Stores only the SHA-256 hash of each session token, and the Discord tokens Fernet-encrypted.
+A session token is ``<id>.<secret>``. The secret is stored only as a salted SHA-256 hash. The Discord tokens are
+stored Fernet-encrypted.
 """
 
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
+from api import DashboardUser
 from cryptography.fernet import Fernet, InvalidToken
-from fm01_schemas import DashboardUser
 
-from app.dashboard.discord import TokenSet
+from app.dashboard.discord import OAuthTokenSet
 
 __all__ = ("Session", "SessionStore")
 
@@ -24,7 +26,7 @@ class Session:
 	"""A signed-in dashboard user.
 
 	Attributes:
-		id: The session token's SHA-256 hash, in hex.
+		id: The public half of the session token.
 		user: The user's Discord profile at sign-in.
 		discord: The user's Discord tokens, decrypted.
 		expires_at: When the session ends.
@@ -32,20 +34,21 @@ class Session:
 
 	id: str
 	user: DashboardUser
-	discord: TokenSet
+	discord: OAuthTokenSet
 	expires_at: datetime
 
 
-def _hash(token: str) -> str:
-	"""Hash a session token. Unsalted, since the token is 256 random bits.
+def _hash(salt: str, secret: str) -> str:
+	"""Hash a session token's secret with its salt.
 
 	Args:
-		token: The session token.
+		salt: The session's salt, in hex.
+		secret: The secret half of the session token.
 
 	Returns:
 		The SHA-256 hash, in hex.
 	"""
-	return hashlib.sha256(token.encode()).hexdigest()
+	return hashlib.sha256(bytes.fromhex(salt) + secret.encode()).hexdigest()
 
 
 class SessionStore:
@@ -62,7 +65,7 @@ class SessionStore:
 		self._fernet = Fernet(key.encode())
 		self._ttl = ttl
 
-	async def create(self, user: DashboardUser, tokens: TokenSet) -> tuple[str, datetime]:
+	async def create(self, user: DashboardUser, tokens: OAuthTokenSet) -> tuple[str, datetime]:
 		"""Open a session for a user. Also deletes expired sessions.
 
 		Args:
@@ -70,17 +73,19 @@ class SessionStore:
 			tokens: The user's Discord tokens.
 
 		Returns:
-			The session token and its expiry. The token can't be recovered later.
+			The session token (``<id>.<secret>``) and its expiry. The token can't be recovered later.
 		"""
-		token = secrets.token_urlsafe(32)
+		session_id, secret, salt = secrets.token_urlsafe(16), secrets.token_urlsafe(32), secrets.token_hex(16)
 		expires_at = datetime.now(UTC) + self._ttl
 		async with self._db.acquire() as conn, conn.transaction():
 			await conn.execute("DELETE FROM dashboard_sessions WHERE expires_at < now()")
 			await conn.execute(
 				"INSERT INTO dashboard_sessions "
-				"(id, user_id, user_profile, access_token, refresh_token, discord_expires_at, scopes, expires_at) "
-				"VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-				_hash(token),
+				"(id, token_salt, token_hash, user_id, user_profile, access_token, refresh_token, discord_expires_at, "
+				"scopes, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+				session_id,
+				salt,
+				_hash(salt, secret),
 				user.id,
 				user.model_dump(mode="json"),
 				self._encrypt(tokens.access_token),
@@ -89,7 +94,7 @@ class SessionStore:
 				sorted(tokens.scopes),
 				expires_at,
 			)
-		return token, expires_at
+		return f"{session_id}.{secret}", expires_at
 
 	async def get(self, token: str) -> Session | None:
 		"""Look up a session by its token.
@@ -98,15 +103,18 @@ class SessionStore:
 			token: The session token.
 
 		Returns:
-			The session. ``None`` if it's unknown, expired or encrypted with an old key.
+			The session. ``None`` if the token is malformed, unknown, expired or encrypted with an old key.
 		"""
+		session_id, _, secret = token.partition(".")
+		if not secret:
+			return None
 		row = await self._db.fetchrow(
-			"SELECT * FROM dashboard_sessions WHERE id = $1 AND expires_at > now()", _hash(token)
+			"SELECT * FROM dashboard_sessions WHERE id = $1 AND expires_at > now()", session_id
 		)
-		if row is None:
+		if row is None or not hmac.compare_digest(_hash(row["token_salt"], secret), row["token_hash"]):
 			return None
 		try:
-			tokens = TokenSet(
+			tokens = OAuthTokenSet(
 				access_token=self._decrypt(row["access_token"]),
 				refresh_token=self._decrypt(row["refresh_token"]),
 				expires_at=row["discord_expires_at"],
@@ -121,7 +129,7 @@ class SessionStore:
 			expires_at=row["expires_at"],
 		)
 
-	async def update_tokens(self, session_id: str, tokens: TokenSet) -> None:
+	async def update_tokens(self, session_id: str, tokens: OAuthTokenSet) -> None:
 		"""Replace a session's Discord tokens.
 
 		Args:

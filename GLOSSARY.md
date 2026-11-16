@@ -26,7 +26,7 @@ The words this repository (bot, API, website and dashboard) uses for its own con
 
 **Message buffering**: the bot keeps recent message content for guilds whose log configuration has message deletion or edit logging on (`Bot.message_logging_guilds`), so deleted and edited messages can be logged. Maintained automatically from the log configuration.
 
-**Ledger**: the only code that changes `economy` balances, in the API (`services/api/app/economy/store.py`); the bot reaches it as `bot.api.economy`. Each operation (`credit`, `debit`, `move`, `transfer`) is one transaction over row-locked accounts. Cash never goes negative; the bank goes negative only as **debt** (admin removals), and money credited while in debt pays it off first. A **Balance** is a member's `cash` and `bank` in one guild.
+**Ledger**: the only code that changes `economy` balances, in the API (`services/api/app/economy/store.py`); the bot reaches it as `bot.api.economy`. Each operation (`add_money`, `remove_money`, `move`, `transfer`) is one transaction over row-locked accounts. Cash never goes negative; the bank goes negative only as **debt** (admin removals), and money added while in debt pays it off first. A **Balance** is a member's `cash` and `bank` in one guild.
 
 **List message**: a localized embed rendered with `CustomResponse.get_list`. Its first field is the **row template** (repeated per row), the remaining fields are the **empty state**, and `{page}`/`{pages}` work in the title, description and footer. Cogs pass rows, never edit rendered embeds. Optional parts of a message use a placeholder that is `None` when absent: the formatter drops that line, and a field left empty is dropped.
 
