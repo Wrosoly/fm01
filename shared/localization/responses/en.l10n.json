@@ -3218,8 +3218,23 @@
           },
           {
             "inline": false,
+            "name": "Gateway proxy latency",
+            "value": "`{proxy:.3f}s`"
+          },
+          {
+            "inline": false,
             "name": "Database ping",
             "value": "`{db:.3f}s`"
+          },
+          {
+            "inline": true,
+            "name": "Cluster",
+            "value": "`{cluster}`"
+          },
+          {
+            "inline": true,
+            "name": "Shard",
+            "value": "`{shard}` / `{shard_count}`"
           }
         ],
         "title": "Pong!"

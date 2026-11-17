@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import discord
 import pytest
 from cogs.afk import AFK
 from cogs.basic import Basic
 from cogs.config_subcommands.leave import setup_leave_subcommands
 from cogs.status import Status
+from core.clustering import ClusterConfig
 from helpers.cli_parser import CLINode, CLIParseError
 
 
@@ -16,6 +18,9 @@ def mock_bot():
 	bot = MagicMock()
 	bot.db = AsyncMock()
 	bot.latency = 0.042
+	bot.get_shard = MagicMock(return_value=None)
+	bot.shard_count = 1
+	bot.cluster_config = ClusterConfig()
 	bot.commands = []
 	bot.guilds = [MagicMock(), MagicMock()]
 	bot.custom_response = AsyncMock()
@@ -40,8 +45,87 @@ class TestBasicCommands:
 		args, kwargs = ctx.send.call_args
 		assert args[0] == "ping"
 		assert kwargs["latency"] == pytest.approx(0.042)
+		assert kwargs["proxy"] is None
 		assert "db" in kwargs
 		assert isinstance(kwargs["db"], float)
+
+	@pytest.mark.asyncio
+	async def test_ping_hides_cluster_and_shard_on_single_shard(self, mock_bot):
+		cog = Basic(mock_bot)
+		ctx = MagicMock()
+		ctx.guild.shard_id = 0
+		ctx.send = AsyncMock()
+
+		await cog.ping.callback(cog, ctx)
+
+		_, kwargs = ctx.send.call_args
+		assert kwargs["cluster"] is None
+		assert kwargs["shard"] is None
+
+	@pytest.mark.asyncio
+	async def test_ping_shows_cluster_and_shard(self, mock_bot):
+		mock_bot.cluster_config = ClusterConfig(mode="clustered", cluster_id="cluster-a")
+		mock_bot.shard_count = 4
+		cog = Basic(mock_bot)
+		ctx = MagicMock()
+		ctx.guild.shard_id = 0
+		ctx.send = AsyncMock()
+
+		await cog.ping.callback(cog, ctx)
+
+		_, kwargs = ctx.send.call_args
+		assert kwargs["cluster"] == "cluster-a"
+		assert kwargs["shard"] == 0
+		assert kwargs["shard_count"] == 4
+
+	@pytest.mark.asyncio
+	async def test_ping_hides_shard_in_dms(self, mock_bot):
+		mock_bot.shard_count = 4
+		cog = Basic(mock_bot)
+		ctx = MagicMock()
+		ctx.guild = None
+		ctx.send = AsyncMock()
+
+		await cog.ping.callback(cog, ctx)
+
+		_, kwargs = ctx.send.call_args
+		assert kwargs["shard"] is None
+
+	@pytest.mark.asyncio
+	async def test_ping_reports_proxy_latency_to_discord(self, mock_bot):
+		mock_bot.cluster_config = ClusterConfig(gateway_url="ws://gateway-proxy:7878")
+		mock_bot.session = MagicMock()
+		mock_bot.get_shard.return_value = MagicMock(latency=0.001)
+		cog = Basic(mock_bot)
+		ctx = MagicMock()
+		ctx.guild.shard_id = 3
+		ctx.send = AsyncMock()
+
+		with patch("cogs.basic.fetch_proxy_shard_latency", new=AsyncMock(return_value=0.05)) as fetch:
+			await cog.ping.callback(cog, ctx)
+
+		fetch.assert_awaited_once_with(mock_bot.session, "ws://gateway-proxy:7878", 3)
+		mock_bot.get_shard.assert_called_with(3)
+		_, kwargs = ctx.send.call_args
+		assert kwargs["latency"] == pytest.approx(0.05)
+		assert kwargs["proxy"] == pytest.approx(0.001)
+
+	@pytest.mark.asyncio
+	async def test_ping_falls_back_when_proxy_metrics_fail(self, mock_bot):
+		mock_bot.cluster_config = ClusterConfig(gateway_url="ws://gateway-proxy:7878")
+		mock_bot.session = MagicMock()
+		mock_bot.get_shard.return_value = MagicMock(latency=0.001)
+		cog = Basic(mock_bot)
+		ctx = MagicMock()
+		ctx.guild.shard_id = 0
+		ctx.send = AsyncMock()
+
+		with patch("cogs.basic.fetch_proxy_shard_latency", new=AsyncMock(side_effect=aiohttp.ClientError)):
+			await cog.ping.callback(cog, ctx)
+
+		_, kwargs = ctx.send.call_args
+		assert kwargs["latency"] == pytest.approx(0.001)
+		assert kwargs["proxy"] is None
 
 
 class TestStatusCog:
