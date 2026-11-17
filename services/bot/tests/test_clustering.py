@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import MagicMock
 
 import discord
 import pytest
+import redis.asyncio as aioredis
 from core.clustering import (
 	ClusterConfig,
 	InMemoryMessageBuffer,
 	InMemoryStateStore,
 	LocalEventBus,
+	RedisShardCoordinator,
 	StandaloneCoordinator,
 )
 from core.clustering.message_buffer import serialize_message
@@ -160,3 +163,42 @@ async def test_standalone_coordinator():
 	await coordinator.update_health(0, 0.05, 100, "ready")
 	await coordinator.release_shards()
 	await coordinator.close()
+
+
+class _FakeLeaseRedis:
+	"""Implements the Redis calls `RedisShardCoordinator` makes, without expiry."""
+
+	def __init__(self) -> None:
+		self.data: dict[str, bytes] = {}
+
+	async def set(self, key: str, value, nx: bool = False, ex: int | None = None) -> bool:
+		if nx and key in self.data:
+			return False
+		self.data[key] = value if isinstance(value, bytes) else str(value).encode()
+		return True
+
+	async def get(self, key: str) -> bytes | None:
+		return self.data.get(key)
+
+	async def mget(self, keys: list[str]) -> list[bytes | None]:
+		return [self.data.get(key) for key in keys]
+
+	async def expire(self, key: str, ttl: int) -> bool:
+		return key in self.data
+
+
+@pytest.mark.asyncio
+async def test_redis_coordinator_reports_unclaimed_shards(caplog):
+	redis = _FakeLeaseRedis()
+	first = RedisShardCoordinator(cast(aioredis.Redis, redis), cluster_id="cluster-a")
+	assert await first.acquire_shards(2, 1) == [0]
+	assert await first.unclaimed_shards() == [1]
+
+	with caplog.at_level("WARNING", logger="core.clustering.coordinator"):
+		await first._check_unclaimed_shards()
+		await first._check_unclaimed_shards()
+	assert len([r for r in caplog.records if "not claimed by any cluster" in r.message]) == 1
+
+	second = RedisShardCoordinator(cast(aioredis.Redis, redis), cluster_id="cluster-b")
+	assert await second.acquire_shards(2, 1) == [1]
+	assert await first.unclaimed_shards() == []

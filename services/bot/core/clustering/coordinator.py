@@ -65,6 +65,8 @@ class RedisShardCoordinator(ShardCoordinator):
 		self.heartbeat_interval = heartbeat_interval
 		self.explicit_shard_ids = explicit_shard_ids
 		self.claimed_shards: list[int] = []
+		self.total_shards = 0
+		self._unclaimed_shards: list[int] = []
 		self._heartbeat_task: asyncio.Task | None = None
 		self._running = False
 		self.prefix = "fm01"
@@ -89,6 +91,7 @@ class RedisShardCoordinator(ShardCoordinator):
 
 	async def acquire_shards(self, total_shards: int, shards_per_cluster: int) -> list[int]:
 		await self.redis.set(f"{self.prefix}:shards:total", str(total_shards))
+		self.total_shards = total_shards
 
 		# If explicit shard IDs are provided in environment, attempt to claim those
 		target_pool = self.explicit_shard_ids if self.explicit_shard_ids is not None else list(range(total_shards))
@@ -141,10 +144,38 @@ class RedisShardCoordinator(ShardCoordinator):
 							f"Shard {shard_id} lease lost by cluster {self.cluster_id}! Attempting re-acquisition..."
 						)
 						await self.redis.set(key, self.cluster_id.encode("utf-8"), ex=self.lease_ttl)
+				await self._check_unclaimed_shards()
 			except asyncio.CancelledError:
 				break
 			except Exception:
 				logger.exception("Error in shard lease heartbeat loop")
+
+	async def unclaimed_shards(self) -> list[int]:
+		"""Return the shard IDs that no cluster holds a lease on.
+
+		The gateway proxy keeps every shard connected to Discord, so an unleased shard's guilds see the bot online
+		while nothing processes their events.
+		"""
+		if not self.total_shards:
+			return []
+		keys = [f"{self.prefix}:shard:lease:{shard_id}" for shard_id in range(self.total_shards)]
+		owners = await self.redis.mget(keys)
+		return [shard_id for shard_id, owner in enumerate(owners) if owner is None]
+
+	async def _check_unclaimed_shards(self) -> None:
+		"""Log when the set of unleased shards changes, so missing capacity never fails silently."""
+		unclaimed = await self.unclaimed_shards()
+		if unclaimed == self._unclaimed_shards:
+			return
+		if unclaimed:
+			logger.warning(
+				f"Shards {unclaimed} of {self.total_shards} are not claimed by any cluster; their guilds get no "
+				"responses. Run more bot replicas or raise SHARDS_PER_CLUSTER so that "
+				"replicas * SHARDS_PER_CLUSTER >= SHARD_COUNT."
+			)
+		else:
+			logger.info(f"All {self.total_shards} shards are claimed")
+		self._unclaimed_shards = unclaimed
 
 	async def update_health(self, shard_id: int, latency: float, guild_count: int, status: str) -> None:
 		try:

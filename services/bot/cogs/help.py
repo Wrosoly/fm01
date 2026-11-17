@@ -83,7 +83,7 @@ class HelpLayoutView(discord.ui.LayoutView):
 
 
 class HelpCommand(commands.HelpCommand):
-	context: Context  # ty: ignore[incompatible-mutable-override]
+	context: Context  # ty: ignore[invalid-mutable-override]
 	custom_response: CustomResponse
 
 	def __init__(self) -> None:
