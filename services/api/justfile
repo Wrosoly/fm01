@@ -1,0 +1,30 @@
+[windows]
+set shell := ["powershell", "-NoLogo", "-Command"]
+
+default:
+  just --list
+
+# Runs the API locally with reload
+dev:
+  uv run uvicorn app.main:app --reload --port 8000
+
+# Formats using Ruff
+format:
+  uv run ruff format .
+
+# Lints using Ruff
+lint:
+  uv run ruff check --fix .
+
+# Type checks using ty
+typecheck:
+  uv run ty check
+
+# Runs tests using Pytest
+test *ARGS:
+  uv run pytest {{ARGS}}
+
+# Regenerates shared/schemas/openapi/openapi.json and the TypeScript types in shared/schemas/ts/
+schemas:
+  uv run python -m app.openapi ../../shared/schemas/openapi/openapi.json
+  npx --yes openapi-typescript@7.13.0 ../../shared/schemas/openapi/openapi.json -o ../../shared/schemas/ts/api.d.ts

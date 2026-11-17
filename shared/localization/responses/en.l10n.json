@@ -192,6 +192,14 @@
     }
   },
   "errors": {
+    "api_unavailable": {
+      "embeds": [
+        {
+          "description": "The bot can't reach its data right now. Please try again in a moment.",
+          "title": "Temporarily unavailable"
+        }
+      ]
+    },
     "bad_argument": {
       "embeds": [
         {

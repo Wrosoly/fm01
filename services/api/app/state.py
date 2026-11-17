@@ -1,0 +1,109 @@
+"""The stores and clients a running API holds."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+
+import asyncpg
+import httpx
+import redis.asyncio as aioredis
+from cryptography.fernet import Fernet
+from fastapi import Request
+
+from app.config import Settings
+from app.dashboard.access import GuildAccess
+from app.dashboard.discord import DiscordClient
+from app.dashboard.sessions import SessionStore
+from app.db import create_pool
+from app.economy.store import Ledger
+from app.events import Announcer
+from app.settings.store import GuildSettingsStore
+
+__all__ = ("AppState", "build_state", "get_state")
+
+
+@dataclass(frozen=True, slots=True)
+class AppState:
+	"""The stores and clients routes use, through the `State` dependency.
+
+	Attributes:
+		config: The configuration.
+		ledger: The Ledger.
+		guild_settings: The guild settings store.
+		discord: The Discord client.
+		sessions: The dashboard session store.
+		access: The guild manager checks.
+	"""
+
+	config: Settings
+	ledger: Ledger
+	guild_settings: GuildSettingsStore
+	discord: DiscordClient
+	sessions: SessionStore
+	access: GuildAccess
+
+
+@asynccontextmanager
+async def build_state(config: Settings) -> AsyncGenerator[AppState]:
+	"""Open the database pool, Redis and the HTTP client, and close them on exit.
+
+	Args:
+		config: The configuration.
+
+	Yields:
+		The app state.
+	"""
+	pool = await create_pool(config.database_url)
+	redis = aioredis.from_url(config.redis_url)
+	http = httpx.AsyncClient(timeout=10)
+	try:
+		yield assemble(config, pool, redis, http)
+	finally:
+		await http.aclose()
+		await redis.aclose()
+		await pool.close()
+
+
+def assemble(config: Settings, pool: asyncpg.Pool, redis: aioredis.Redis, http: httpx.AsyncClient) -> AppState:
+	"""Build the app state on open connections.
+
+	Args:
+		config: The configuration.
+		pool: The database pool.
+		redis: The Redis client.
+		http: The HTTP client for Discord.
+
+	Returns:
+		The app state.
+	"""
+	discord = DiscordClient(
+		http,
+		config.discord_api_url,
+		config.discord_client_id or "",
+		config.discord_client_secret or "",
+		config.discord_bot_token,
+	)
+	# Without dashboard sign-in no session can be created, so a throwaway key is as good as any.
+	sessions = SessionStore(pool, config.session_key or Fernet.generate_key().decode(), config.session_ttl)
+	return AppState(
+		config=config,
+		ledger=Ledger(pool),
+		guild_settings=GuildSettingsStore(pool, Announcer(redis)),
+		discord=discord,
+		sessions=sessions,
+		access=GuildAccess(discord, sessions, redis, config.permission_ttl),
+	)
+
+
+def get_state(request: Request) -> AppState:
+	"""Get the running app's state.
+
+	Args:
+		request: The current request.
+
+	Returns:
+		The app state.
+	"""
+	return request.app.state.fm01

@@ -47,9 +47,9 @@ deploy ref="":
   git checkout --force --detach "$ref"
   uv sync
   just up db
-  docker compose build bot migrations
+  docker compose build api bot migrations
   just migrate
-  just up --remove-orphans db lavalink redis bot
+  just up --remove-orphans db lavalink redis api bot
 
 # Restarts the entire stack, disconnecting from Discord
 deploy-proxy:
@@ -61,13 +61,14 @@ deploy-proxy:
 [windows]
 debug:
   if (docker compose ps bot --status running -q 2>$null) { \
-    docker compose build migrations; \
+    docker compose build migrations api; \
     just migrate; \
+    just up api; \
     just restart bot; \
   } else { \
     uv sync; \
     just up db; \
-    docker compose build migrations; \
+    docker compose build migrations api; \
     just migrate; \
     just up; \
   }
@@ -77,13 +78,14 @@ debug:
 [unix]
 debug:
   if [ -n "$(docker compose ps bot --status running -q 2>/dev/null)" ]; then \
-    docker compose build migrations; \
+    docker compose build migrations api; \
     just migrate; \
+    just up api; \
     just restart bot; \
   else \
     uv sync; \
     just up db; \
-    docker compose build migrations; \
+    docker compose build migrations api; \
     just migrate; \
     just up; \
   fi

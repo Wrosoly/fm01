@@ -55,7 +55,11 @@ async def test_config_mod_set_delete(mock_ctx):
 	# Should update the cached setting and tell other instances
 	assert mock_ctx.bot.settings["mod.retention"].cache[12345] == "delete"
 	event = mock_ctx.bot.event_bus.publish.call_args.args[1]
-	assert (event["type"], event["key"], event["guild_id"]) == (INVALIDATE_SETTING, "mod.retention", 12345)
+	assert (event["type"], event["key"], event["guild_id"]) == (
+		INVALIDATE_SETTING,
+		"mod.retention",
+		"12345",
+	)  # snowflakes are strings on the wire
 	call_content = mock_ctx.send.call_args.kwargs.get("content", "")
 	assert "Moderation case retention set to delete" in call_content
 

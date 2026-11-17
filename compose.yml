@@ -92,7 +92,7 @@ services:
     profiles:
       - gateway-proxy
 
-  # One-shot: applies pending Alembic migrations, then exits. The bot waits for a successful exit.
+  # One-shot: applies pending Alembic migrations (the API's schema), then exits. The API and bot wait for it.
   migrations:
     build: ./services/migrations/
     restart: "no"
@@ -106,8 +106,44 @@ services:
       DB_HOST: ${DB_HOST:-db}
       DB_NAME: ${DB_NAME:-fm01}
 
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD:?Please set a database password in .env}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_USER: ${DB_USER:-fm01}
+      DB_HOST: ${DB_HOST:-db}
+      DB_NAME: ${DB_NAME:-fm01}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN:?Please set an internal API token in .env}
+      TOKEN: ${TOKEN:?Please set a bot token in .env}
+      # Dashboard sign-in; leave unset to run without the dashboard.
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:-}
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
   bot:
-    build: ./services/bot/
+    build:
+      context: .
+      dockerfile: services/bot/Dockerfile
     depends_on:
       db:
         condition: service_healthy
@@ -119,8 +155,12 @@ services:
         condition: service_started
       migrations:
         condition: service_completed_successfully
+      api:
+        condition: service_healthy
     restart: unless-stopped
     environment:
+      API_URL: ${API_URL:-http://api:8000}
+      API_INTERNAL_TOKEN: ${API_INTERNAL_TOKEN:?Please set an internal API token in .env}
       TOKEN: ${TOKEN:?Please set a bot token in .env}
       DEBUG_TOKEN: ${DEBUG_TOKEN}
       DB_PASSWORD: ${DB_PASSWORD:?Please set a database password in .env}
@@ -143,9 +183,9 @@ services:
       TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID:-}
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
     volumes:
-      - ./services/bot:/bot
-      # The bot resolves localizations to /shared/localization (../../shared from /bot).
-      - ./shared:/shared:ro
+      # Mirrors the repository layout, as the image does: the bot resolves localizations and schemas at ../../shared.
+      - ./services/bot:/fm01/services/bot
+      - ./shared:/fm01/shared:ro
 
 volumes:
   postgres_data:
