@@ -260,6 +260,25 @@
     "name": "config",
     "usage": "config [flags_and_args]"
   },
+  "convert": {
+    "args": {
+      "amount": {
+        "desc": "The amount to convert",
+        "name": "amount"
+      },
+      "to": {
+        "desc": "The unit, currency or cryptocurrency to convert to",
+        "name": "to"
+      },
+      "unit": {
+        "desc": "The unit, currency or cryptocurrency to convert from (ex. km, lb, EUR, BTC)",
+        "name": "unit"
+      }
+    },
+    "desc": "Convert between distances, weights, currencies and cryptocurrencies",
+    "name": "convert",
+    "usage": "convert [amount] [unit] [to]"
+  },
   "crime": {
     "desc": "Earn money by committing crime virtually ($500-$2000)",
     "name": "crime"
@@ -942,6 +961,7 @@
     "name": "user",
     "usage": "info user (user|member)"
   },
+  "utility": "utility",
   "voice": "voice",
   "voice_remove": {
     "args": {

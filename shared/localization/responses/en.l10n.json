@@ -157,7 +157,33 @@
     "setup": "🔧 Setup",
     "shop": "🏪 Shop",
     "snapshots": "📸 Snapshots",
+    "utility": "🧰 Utility",
     "voice": "🔊 Voice"
+  },
+  "convert": {
+    "crypto": {
+      "content": "🪙 **{amount:,.8g} {unit}** = **{result:,.8g} {to}**"
+    },
+    "currency": {
+      "content": "💱 **{amount:,.2f} {unit}** = **{result:,.2f} {to}**"
+    },
+    "distance": {
+      "content": "📏 **{amount:,.6g} {unit}** = **{result:,.6g} {to}**"
+    },
+    "errors": {
+      "incompatible": {
+        "content": "`{unit}` can't be converted to `{to}`!"
+      },
+      "unavailable": {
+        "content": "Exchange rates are unavailable right now. Try again later."
+      },
+      "unknown_unit": {
+        "content": "`{unit}` is not a known unit or currency."
+      }
+    },
+    "weight": {
+      "content": "⚖️ **{amount:,.6g} {unit}** = **{result:,.6g} {to}**"
+    }
   },
   "crime": {
     "embeds": [
