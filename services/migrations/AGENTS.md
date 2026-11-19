@@ -36,5 +36,5 @@ Guidelines for AI agents and tools working on the fm01 database migrations servi
 
 ## 4. Operational Directives
 
-- Run migrations through Compose or the justfile (`just migrate` in `services/bot`), never by hand against production.
+- Run migrations through Compose or the justfile (`just migrate`), never by hand against production.
 - Give short, direct answers.
