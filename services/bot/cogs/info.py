@@ -1,3 +1,4 @@
+import ipaddress
 import re
 from typing import Any
 
@@ -94,9 +95,13 @@ class Info(commands.Cog, name="Information"):
 
 	@info.command(user=False, l10n_key="ipinfo", full_aliases=["ipinfo", "ip"])
 	async def ip(self, ctx: Context, ip_addr: str):
+		try:
+			address = ipaddress.ip_address(ip_addr)
+		except ValueError:
+			raise commands.BadArgument("ip")
 		await ctx.defer()  # slow: calls ipinfo.io
 		try:
-			ip_json = await self.client.request(f"https://ipinfo.io/{ip_addr}/json")
+			ip_json = await self.client.request(f"https://ipinfo.io/{address}/json")
 		except RuntimeError:
 			raise commands.BadArgument("ip")
 		ip = IPAddress(ip_json)

@@ -131,3 +131,11 @@ async def test_user_from_another_guild_shows_only_user_info(cog, ctx):
 	with patch("cogs.info.User.from_user", return_value="u") as from_user:
 		await cog.user.callback(cog, ctx, member)
 	from_user.assert_called_once_with(user)
+
+
+async def test_ip_refuses_anything_but_an_address(cog, ctx):
+	cog.client.request = AsyncMock()
+
+	with pytest.raises(commands.BadArgument):
+		await cog.ip.callback(cog, ctx, "../me")
+	cog.client.request.assert_not_called()
