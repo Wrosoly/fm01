@@ -17,6 +17,7 @@ from cogs.mod.cases import (
 	Kick,
 	Mute,
 	Retention,
+	Softban,
 	Warn,
 	retention_setting,
 )
@@ -37,6 +38,7 @@ __all__ = (
 	"Kick",
 	"Moderation",
 	"Mute",
+	"Softban",
 	"Warn",
 )
 

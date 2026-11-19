@@ -14,6 +14,8 @@ The words this repository (bot, API, website and dashboard) uses for its own con
 
 **Retention**: a guild's choice of what closing a case does: `keep` (mark it inactive, the default) or `delete` (remove the row). Stored in `mod_config.case_retention`. `case delete` always deletes, regardless of retention.
 
+**Softban**: a case that bans a user with the last hour of their messages deleted and unbans them at once: a kick that also cleans up. `Softban` in `cogs/mod/cases.py`. A failed unban is logged, not rolled back, because the ban already happened.
+
 **Case store**: `CaseStore` in `cogs/mod/cases.py`, the only code that reads or writes `cases`. Commands and AutoMod open, close, edit and look up cases through it.
 
 **Guild setting**: a per-guild configuration value (prefix, locale override, case retention, ...) behind a `GuildSetting` in `core/settings.py`. Read with `get` (or `cache` on hot synchronous paths), write with `set`; code that writes with targeted SQL calls `changed` afterwards instead. Writing persists it and announces an `INVALIDATE_SETTING` event so other bot instances reload it (for settings that live behind the API, the API announces); callers never touch caches or the event bus. Settings with a meaningful default row (prefix, retention) create it from the column defaults on first load; feature settings (log, AutoMod, join/leave, leveling) treat a missing row as "not configured".
@@ -27,6 +29,8 @@ The words this repository (bot, API, website and dashboard) uses for its own con
 **Message buffering**: the bot keeps recent message content for guilds whose log configuration has message deletion or edit logging on (`Bot.message_logging_guilds`), so deleted and edited messages can be logged. Maintained automatically from the log configuration.
 
 **Ledger**: the only code that changes `economy` balances, in the API (`services/api/app/economy/store.py`); the bot reaches it as `bot.api.economy`. Each operation (`add_money`, `remove_money`, `move`, `transfer`) is one transaction over row-locked accounts. Cash never goes negative; the bank goes negative only as **debt** (admin removals), and money added while in debt pays it off first. A **Balance** is a member's `cash` and `bank` in one guild.
+
+**Bear trap**: a honeypot channel (`?!config beartrap`, Dashboard API `settings/bear-trap`). The bot posts the localized **trap message** there, with a disabled button counting the **kicks**. Anyone who posts in the channel, except bots, the owner, managers and members the bot can't ban, gets a DM to secure their account (with an invite back) and is soft-banned. Stored behind the API as the `bear_trap` guild setting (`bear_trap` table). The kick count survives moving or turning off the trap. Whoever changes the channel, the bot instance that owns the guild's shard **reconciles** the trap message: posts, moves or deletes it. If it can't post, it turns the trap off.
 
 **List message**: a localized embed rendered with `CustomResponse.get_list`. Its first field is the **row template** (repeated per row), the remaining fields are the **empty state**, and `{page}`/`{pages}` work in the title, description and footer. Cogs pass rows, never edit rendered embeds. Optional parts of a message use a placeholder that is `None` when absent: the formatter drops that line, and a field left empty is dropped.
 

@@ -14,8 +14,13 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from api import (
 	AddMoneyRequest,
 	Balance,
+	BearTrapChannel,
+	BearTrapKicks,
+	BearTrapMessage,
+	BearTrapState,
 	ErrorBody,
 	ErrorCode,
+	GuildBearTrap,
 	GuildLocale,
 	GuildPrefix,
 	LeaderboardEntry,
@@ -27,7 +32,15 @@ from api import (
 	Wallet,
 )
 
-__all__ = ("ApiClient", "ApiError", "ApiUnavailable", "EconomyApi", "InsufficientFunds", "SettingsApi")
+__all__ = (
+	"ApiClient",
+	"ApiError",
+	"ApiUnavailable",
+	"BearTrapApi",
+	"EconomyApi",
+	"InsufficientFunds",
+	"SettingsApi",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +89,7 @@ class ApiClient:
 		self._session: aiohttp.ClientSession | None = None
 		self.economy = EconomyApi(self)
 		self.settings = SettingsApi(self)
+		self.bear_trap = BearTrapApi(self)
 
 	async def close(self) -> None:
 		"""Close the HTTP session. The next request opens a new one."""
@@ -345,3 +359,76 @@ class SettingsApi:
 		"""
 		entries = await self._client.request("GET", "/settings/locale", list[GuildLocale])
 		return {entry.guild_id: entry.locale for entry in entries}
+
+
+class BearTrapApi:
+	"""Bear trap operations. Every method can also raise `ApiUnavailable`.
+
+	Args:
+		client: The API client.
+	"""
+
+	def __init__(self, client: ApiClient) -> None:
+		self._client = client
+
+	async def get(self, guild_id: int) -> BearTrapState:
+		"""Get a guild's bear trap.
+
+		Args:
+			guild_id: The guild.
+
+		Returns:
+			The trap. Off with no kicks if the guild never set one.
+		"""
+		return await self._client.request("GET", f"/guilds/{guild_id}/settings/bear-trap", BearTrapState)
+
+	async def all(self) -> dict[int, BearTrapState]:
+		"""List every guild whose trap is on or still has a message posted.
+
+		Returns:
+			The traps, by guild ID.
+		"""
+		entries = await self._client.request("GET", "/settings/bear-trap", list[GuildBearTrap])
+		return {
+			entry.guild_id: BearTrapState.model_validate(entry.model_dump(exclude={"guild_id"})) for entry in entries
+		}
+
+	async def set_channel(self, guild_id: int, channel_id: int | None) -> BearTrapState:
+		"""Set a guild's bear trap channel.
+
+		Args:
+			guild_id: The guild.
+			channel_id: The channel. ``None`` turns the trap off.
+
+		Returns:
+			The stored trap.
+		"""
+		body = BearTrapChannel(channel_id=channel_id)
+		return await self._client.request("PUT", f"/guilds/{guild_id}/settings/bear-trap", BearTrapState, body=body)
+
+	async def set_message(self, guild_id: int, channel_id: int | None, message_id: int | None) -> BearTrapState:
+		"""Record the trap message the bot posted.
+
+		Args:
+			guild_id: The guild.
+			channel_id: The message's channel. ``None`` with ``message_id`` records that there is no message.
+			message_id: The message.
+
+		Returns:
+			The stored trap.
+		"""
+		body = BearTrapMessage(message_channel_id=channel_id, message_id=message_id)
+		return await self._client.request(
+			"PUT", f"/guilds/{guild_id}/settings/bear-trap/message", BearTrapState, body=body
+		)
+
+	async def add_kick(self, guild_id: int) -> int:
+		"""Count one more member the trap soft-banned.
+
+		Args:
+			guild_id: The guild.
+
+		Returns:
+			The new count.
+		"""
+		return (await self._client.request("POST", f"/guilds/{guild_id}/settings/bear-trap/kicks", BearTrapKicks)).kicks

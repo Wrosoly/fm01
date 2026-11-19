@@ -36,6 +36,7 @@ __all__ = (
 	"Kick",
 	"Mute",
 	"Retention",
+	"Softban",
 	"Warn",
 	"retention_setting",
 )
@@ -53,6 +54,7 @@ class CaseType(Enum):
 	MUTE = 2
 	KICK = 3
 	BAN = 4
+	SOFTBAN = 5
 
 
 class Case:
@@ -224,6 +226,51 @@ class Kick(Case):
 			await self._user.kick(reason=await self._audit_reason("mod.kick.reason"))
 
 
+SOFTBAN_DELETE_SECONDS = 3600
+"""How far back a softban deletes the user's messages."""
+
+
+class Softban(Case):
+	"""A kick that also deletes the user's recent messages: a ban, lifted at once."""
+
+	audit_reason_key = "mod.softban.reason"
+	"""The localization key of the audit-log reason for the ban and unban."""
+
+	def __init__(
+		self,
+		_id: int,
+		bot: Bot,
+		guild: discord.Guild,
+		user: discord.Member | discord.User,
+		moderator: discord.User | discord.Member,
+		reason: str | None = None,
+		message: str | None = None,
+		created: datetime.datetime = MISSING,
+		expires: datetime.datetime | None = None,
+		active: bool = True,
+	):
+		super().__init__(
+			CaseType.SOFTBAN, _id, bot, guild, user, moderator, created, reason, expires, message, active=active
+		)
+
+	async def before_creation(self) -> None:
+		"""Notifies the user about the softban. The ban ends their last shared server, so this comes first."""
+		await self._notify("mod.softban.notify", softban=self)
+
+	async def after_creation(self) -> None:
+		"""Bans the user, deleting their recent messages, and unbans them.
+
+		A failed unban is logged instead of raised: the ban already happened, so the case stays.
+		"""
+		reason = await self._audit_reason(self.audit_reason_key)
+		user = discord.Object(self._user.id)
+		await self._guild.ban(user, reason=reason, delete_message_seconds=SOFTBAN_DELETE_SECONDS)
+		try:
+			await self._guild.unban(user, reason=reason)
+		except discord.HTTPException:
+			logger.exception(f"Softban {self.id} banned {self._user.id} in {self._guild.id} but failed to unban")
+
+
 class Mute(Case):
 	def __init__(
 		self,
@@ -312,6 +359,7 @@ CASE_CLASSES: dict[CaseType, Callable[..., Case]] = {
 	CaseType.MUTE: Mute,
 	CaseType.KICK: Kick,
 	CaseType.BAN: Ban,
+	CaseType.SOFTBAN: Softban,
 }
 
 

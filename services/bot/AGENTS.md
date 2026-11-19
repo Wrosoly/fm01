@@ -42,7 +42,7 @@ This document defines architectural standards, technical conventions, and operat
 
 #### `core/` (Foundational Abstractions)
 
-- `api.py` (`ApiClient`): The API client, the bot's typed wrapper around the Internal API (`bot.api.economy`, `bot.api.settings`). Maps API error codes back to exceptions (`InsufficientFunds`, `ValueError`) and transport failures to `ApiUnavailable`, which the global error handler answers with `errors.api_unavailable`.
+- `api.py` (`ApiClient`): The API client, the bot's typed wrapper around the Internal API (`bot.api.economy`, `bot.api.settings`, `bot.api.bear_trap`). Maps API error codes back to exceptions (`InsufficientFunds`, `ValueError`) and transport failures to `ApiUnavailable`, which the global error handler answers with `errors.api_unavailable`.
 - `bot.py` (`Bot`): Subclasses `commands.AutoShardedBot`. Manages the API client (`self.api`), database connection pool (`self.db`), prefix cache, clustering coordinator, event bus, message logging buffer, and global error handling.
 - `context.py` (`Context`): Subclasses `commands.Context`. Overrides `send()` to automatically intercept localization keys and format variables via `CustomResponse`.
 - `hybrid.py` (`command`, `group`, `HybridCommand`, `HybridGroup`): Custom command decorators automatically linking commands to the slash command localization tree.
@@ -74,14 +74,15 @@ Dataclasses decorated with `@dataclass(slots=True)` that wrap Discord objects (e
 - `afk.py`: AFK presence tracking, auto-nicknames, and mention notifications.
 - `automod.py`: Server protection rule engine (invite blocking, links, caps, spam, word filters).
 - `basic.py`: Core utility commands (`ping`, `uptime`).
-- `config.py` & `config_subcommands/`: Hierarchical CLI server settings management (`automod`, `join`, `leave`, `level`, `log`, `prefix`, `ticket`).
+- `bear_trap.py`: The bear trap: soft-bans members who post in the trap channel and keeps the trap message (with its kick counter) in step with the `bear_trap` setting behind the API (`bot.api.bear_trap`).
+- `config.py` & `config_subcommands/`: Hierarchical CLI server settings management (`automod`, `beartrap`, `join`, `leave`, `level`, `log`, `prefix`, `ticket`).
 - `economy.py`: Virtual economy commands and the shop. Balances go through the Ledger in the API (`bot.api.economy`); the shop's own table is still queried directly.
 - `help.py`: Dynamic help system subclassing `commands.HelpCommand` with paginated views.
 - `info.py`: Server, user, role, and bot diagnostic inspection commands.
 - `join_leave.py`: Welcome/leave announcement handlers and autorole assignment.
 - `level.py`: Message XP awarding, rank card generator (`?!level`), leaderboards (`?!levels`), and level role rewards.
 - `log.py`: Server event audit logger (message edits/deletions, member changes, channel updates). `LogSettings` is the log configuration guild setting; the config commands use it too.
-- `mod/`: Moderation command suite (`ban`, `kick`, `mute`, `warn`, `case`). `mod/cases.py` is the Case module: `CaseStore` owns every query on `cases`, retention, and expiry.
+- `mod/`: Moderation command suite (`ban`, `kick`, `mute`, `warn`, `case`). `mod/cases.py` is the Case module: `CaseStore` owns every query on `cases`, retention, and expiry. `Softban` has no command; the bear trap opens it.
 - `say.py`: Echo and Minecraft achievement message generators.
 - `setup.py`: Interactive first-time server setup helper.
 - `snapshot.py`: Guild structural backup and restoration system.
@@ -128,7 +129,7 @@ Dataclasses decorated with `@dataclass(slots=True)` that wrap Discord objects (e
 
 ### 5. Data Access, Schema & Migrations
 
-- Data whose domain has moved to the API (economy balances, prefix, locale override) is reached only through `self.bot.api`. Never query those tables directly.
+- Data whose domain has moved to the API (economy balances, prefix, locale override, bear trap) is reached only through `self.bot.api`. Never query those tables directly.
 - Moving a domain: add its store and Internal API routes in `services/api/` (see its `AGENTS.md`), the wire models in `shared/schemas/`, then the matching methods on the API client, and remove the bot's queries.
 - Everything else still uses `self.bot.db` (`asyncpg.Pool`) until it moves.
 - The bot never runs migrations. Schema changes go in `services/migrations/` (see its `AGENTS.md`); the `migrations` Compose service applies them before the bot starts.

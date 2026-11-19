@@ -31,6 +31,7 @@ app/
 ├── openapi.py        # Writes the OpenAPI schema (source of the TS types)
 ├── economy/          # store.py (Ledger), routes.py (Internal API)
 ├── settings/         # store.py (prefix, locale), routes.py (Internal + Dashboard API)
+├── bear_trap/        # store.py (bear trap), routes.py (Internal + Dashboard API)
 └── dashboard/        # discord.py (OAuth2/REST), sessions.py, access.py (guild manager rule), routes.py
 tests/                # One file per area; conftest.py has the database, fake Redis and fake Discord
 ```
