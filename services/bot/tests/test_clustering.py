@@ -202,3 +202,50 @@ async def test_redis_coordinator_reports_unclaimed_shards(caplog):
 	second = RedisShardCoordinator(cast(aioredis.Redis, redis), cluster_id="cluster-b")
 	assert await second.acquire_shards(2, 1) == [1]
 	assert await first.unclaimed_shards() == []
+
+
+class _FakePubSub:
+	"""Mimics redis-py's PubSub: ``listen()`` ends as soon as nothing is subscribed."""
+
+	def __init__(self) -> None:
+		self.channels: set[str] = set()
+		self.queue: asyncio.Queue[dict] = asyncio.Queue()
+
+	@property
+	def subscribed(self) -> bool:
+		return bool(self.channels)
+
+	async def subscribe(self, *channels: str) -> None:
+		self.channels.update(channels)
+
+	async def listen(self):
+		while self.subscribed:
+			yield await self.queue.get()
+
+	async def unsubscribe(self) -> None:
+		self.channels.clear()
+
+	async def aclose(self) -> None:
+		pass
+
+
+@pytest.mark.asyncio
+async def test_redis_bus_delivers_messages_on_channels_subscribed_after_start():
+	from core.clustering import RedisPubSubBus
+
+	pubsub = _FakePubSub()
+	redis = MagicMock()
+	redis.pubsub.return_value = pubsub
+	bus = RedisPubSubBus(redis)
+	received: asyncio.Queue[dict] = asyncio.Queue()
+
+	async def handler(message: dict) -> None:
+		await received.put(message)
+
+	await bus.start()  # the bot starts the bus before it subscribes
+	await asyncio.sleep(0)
+	await bus.subscribe("fm01:events", handler)
+	await pubsub.queue.put({"type": "message", "channel": b"fm01:events", "data": b'{"type": "PING"}'})
+
+	assert await asyncio.wait_for(received.get(), timeout=1) == {"type": "PING"}
+	await bus.close()
