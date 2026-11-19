@@ -142,6 +142,49 @@
       }
     ]
   },
+  "bear_trap": {
+    "message": {
+      "allowed_mentions": [
+        "none"
+      ],
+      "components": [
+        {
+          "accent_color": 15105570,
+          "components": [
+            {
+              "content": "# 🐻 Bear trap",
+              "type": "text_display"
+            },
+            {
+              "content": "**Do not post in this channel.** Anyone who sends a message here is kicked from the server at once, and their recent messages are deleted.\n-# Hacked accounts spam every channel they can see. This one catches them.",
+              "type": "text_display"
+            },
+            {
+              "type": "separator"
+            },
+            {
+              "custom_id": "bear_trap:{guild.id}",
+              "disabled": true,
+              "label": "🐻 {kicks} caught",
+              "style": "secondary",
+              "type": "button"
+            }
+          ],
+          "type": "container"
+        }
+      ]
+    },
+    "notify": {
+      "embeds": [
+        {
+          "color": 15548997,
+          "description": "You sent a message in a bear trap channel in **{guild}**. Only spam bots post there, so your account has probably been hacked.\n\n**Change your Discord password now** and turn on two-factor authentication. Then check **Authorized Apps** and **Devices** in your settings for anything you don't recognize.\n\nOnce your account is safe again, you can rejoin: {invite}",
+          "title": "You were kicked from {guild}"
+        }
+      ]
+    },
+    "reason": "Posted in the bear trap channel"
+  },
   "cogs": {
     "afk": "💤 AFK",
     "automod": "🤖 AutoMod",
@@ -3040,6 +3083,26 @@
           }
         ]
       }
+    },
+    "softban": {
+      "notify": {
+        "embeds": [
+          {
+            "description": "You have been kicked from **{guild}** and your recent messages there were deleted.",
+            "fields": [
+              {
+                "name": "Reason",
+                "value": "{softban.reason}"
+              }
+            ],
+            "footer": {
+              "text": "{softban.id}"
+            },
+            "title": "Kick"
+          }
+        ]
+      },
+      "reason": "Soft-banned by {moderator.name}"
     },
     "unban": {
       "case_reason": "Ban case {case.id} closed",

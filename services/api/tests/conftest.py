@@ -75,7 +75,7 @@ async def db(postgres_dsn: str) -> AsyncIterator[asyncpg.Pool]:
 
 @dataclass
 class FakeDiscord:
-	"""Just enough of Discord's REST API for the dashboard: OAuth2, the current user, and guild lookups."""
+	"""Just enough of Discord's REST API for the dashboard: OAuth2, the current user, guild and channel lookups."""
 
 	codes: dict[str, str] = field(default_factory=dict)
 	"""Authorization code -> access token it grants."""
@@ -84,6 +84,8 @@ class FakeDiscord:
 	guilds: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 	"""Access token -> ``/users/@me/guilds`` entries."""
 	bot_guilds: set[int] = field(default_factory=set)
+	channels: dict[int, dict[str, Any]] = field(default_factory=dict)
+	"""Channel ID -> channel object the bot can see."""
 	scope: str = "identify guilds"
 	calls: list[str] = field(default_factory=list)
 	revoked: list[str] = field(default_factory=list)
@@ -118,6 +120,9 @@ class FakeDiscord:
 		if path == "/users/@me/guilds":
 			guilds = self.guilds.get(auth.removeprefix("Bearer "))
 			return httpx.Response(200, json=guilds) if guilds is not None else httpx.Response(401, json={})
+		if path.startswith("/channels/") and auth.startswith("Bot "):
+			channel = self.channels.get(int(path.removeprefix("/channels/")))
+			return httpx.Response(200, json=channel) if channel else httpx.Response(404, json={})
 		if path.startswith("/guilds/") and auth.startswith("Bot "):
 			guild_id = int(path.removeprefix("/guilds/"))
 			if guild_id in self.bot_guilds:

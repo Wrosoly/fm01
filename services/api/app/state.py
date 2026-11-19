@@ -12,6 +12,7 @@ import redis.asyncio as aioredis
 from cryptography.fernet import Fernet
 from fastapi import Request
 
+from app.bear_trap.store import BearTrapStore
 from app.config import Settings
 from app.dashboard.access import GuildAccess
 from app.dashboard.discord import DiscordClient
@@ -32,6 +33,7 @@ class AppState:
 		config: The configuration.
 		ledger: The Ledger.
 		guild_settings: The guild settings store.
+		bear_traps: The bear trap store.
 		discord: The Discord client.
 		sessions: The dashboard session store.
 		access: The guild manager checks.
@@ -40,6 +42,7 @@ class AppState:
 	config: Settings
 	ledger: Ledger
 	guild_settings: GuildSettingsStore
+	bear_traps: BearTrapStore
 	discord: DiscordClient
 	sessions: SessionStore
 	access: GuildAccess
@@ -86,11 +89,13 @@ def assemble(config: Settings, pool: asyncpg.Pool, redis: aioredis.Redis, http: 
 		config.discord_bot_token,
 	)
 	# Without dashboard sign-in no session can be created, so a throwaway key is as good as any.
+	announcer = Announcer(redis)
 	sessions = SessionStore(pool, config.session_key or Fernet.generate_key().decode(), config.session_ttl)
 	return AppState(
 		config=config,
 		ledger=Ledger(pool),
-		guild_settings=GuildSettingsStore(pool, Announcer(redis)),
+		guild_settings=GuildSettingsStore(pool, announcer),
+		bear_traps=BearTrapStore(pool, announcer),
 		discord=discord,
 		sessions=sessions,
 		access=GuildAccess(discord, sessions, redis, config.permission_ttl),
