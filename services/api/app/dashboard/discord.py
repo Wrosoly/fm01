@@ -133,6 +133,27 @@ class DiscordClient:
 			raise
 		return True
 
+	async def guild_channel(self, guild_id: int, channel_id: int) -> dict[str, Any] | None:
+		"""Look up a channel as the bot, if it belongs to a guild.
+
+		Args:
+			guild_id: The guild the channel must belong to.
+			channel_id: The channel.
+
+		Returns:
+			Discord's channel object, or ``None`` if the bot can't see the channel or it belongs to another guild.
+
+		Raises:
+			ApiError: ``discord_unavailable`` if Discord fails.
+		"""
+		try:
+			channel = await self._get(f"/channels/{channel_id}", f"Bot {self._bot_token}", user_call=False)
+		except ApiError as exc:
+			if exc.code in (ErrorCode.FORBIDDEN, ErrorCode.NOT_FOUND):
+				return None
+			raise
+		return channel if str(channel.get("guild_id")) == str(guild_id) else None
+
 	async def _token(self, form: dict[str, str]) -> OAuthTokenSet:
 		"""Call the OAuth2 token endpoint.
 

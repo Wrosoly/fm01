@@ -66,6 +66,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dashboard/guilds/{guild_id}/settings/bear-trap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Bear Trap
+         * @description Get a guild's bear trap.
+         */
+        get: operations["bear_trap"];
+        /**
+         * Set Bear Trap
+         * @description Set a guild's bear trap channel. A `null` channel turns the trap off.
+         *
+         *     The bot posts the trap message in the channel. If it can't, it turns the trap off again.
+         */
+        put: operations["set_bear_trap"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/dashboard/guilds/{guild_id}/settings/locale": {
         parameters: {
             query?: never;
@@ -274,6 +300,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/guilds/{guild_id}/settings/bear-trap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Internal Bear Trap
+         * @description Get a guild's bear trap.
+         */
+        get: operations["internal_bear_trap"];
+        /**
+         * Internal Set Bear Trap
+         * @description Set a guild's bear trap channel. A `null` channel turns the trap off.
+         */
+        put: operations["internal_set_bear_trap"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/guilds/{guild_id}/settings/bear-trap/kicks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Internal Add Bear Trap Kick
+         * @description Count one more member the trap soft-banned.
+         */
+        post: operations["internal_add_bear_trap_kick"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/guilds/{guild_id}/settings/bear-trap/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Internal Set Bear Trap Message
+         * @description Record the trap message the bot posted. `null` fields record that it removed it.
+         */
+        put: operations["internal_set_bear_trap_message"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/internal/guilds/{guild_id}/settings/locale": {
         parameters: {
             query?: never;
@@ -315,6 +405,26 @@ export interface paths {
          * @description Set a guild's prefix.
          */
         put: operations["internal_set_prefix"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/internal/settings/bear-trap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * All Bear Traps
+         * @description List every guild whose trap is on or still has a message posted.
+         */
+        get: operations["all_bear_traps"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -402,6 +512,62 @@ export interface components {
             cash: number;
         };
         /**
+         * BearTrap
+         * @description A guild's bear trap, as a guild manager sees it.
+         */
+        BearTrap: {
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Kicks
+             * @default 0
+             */
+            kicks: number;
+        };
+        /**
+         * BearTrapChannel
+         * @description The channel to set the bear trap in. ``None`` turns the trap off.
+         */
+        BearTrapChannel: {
+            /** Channel Id */
+            channel_id?: string | null;
+        };
+        /**
+         * BearTrapKicks
+         * @description The bear trap's kick count after a kick.
+         */
+        BearTrapKicks: {
+            /** Kicks */
+            kicks: number;
+        };
+        /**
+         * BearTrapMessage
+         * @description The trap message the bot posted. ``None`` fields mean there is no message.
+         */
+        BearTrapMessage: {
+            /** Message Channel Id */
+            message_channel_id?: string | null;
+            /** Message Id */
+            message_id?: string | null;
+        };
+        /**
+         * BearTrapState
+         * @description A guild's bear trap with the bot's own bookkeeping.
+         */
+        BearTrapState: {
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Kicks
+             * @default 0
+             */
+            kicks: number;
+            /** Message Channel Id */
+            message_channel_id?: string | null;
+            /** Message Id */
+            message_id?: string | null;
+        };
+        /**
          * DashboardUser
          * @description A signed-in user's Discord profile.
          */
@@ -432,7 +598,29 @@ export interface components {
          * @description Why a request failed. Clients branch on this, never on the message.
          * @enum {string}
          */
-        ErrorCode: "invalid_request" | "unauthorized" | "forbidden" | "not_found" | "insufficient_funds" | "same_account" | "discord_unavailable";
+        ErrorCode: "invalid_request" | "unauthorized" | "forbidden" | "not_found" | "insufficient_funds" | "same_account" | "invalid_channel" | "discord_unavailable";
+        /**
+         * GuildBearTrap
+         * @description A guild's bear trap state, with the guild's ID.
+         */
+        GuildBearTrap: {
+            /** Channel Id */
+            channel_id?: string | null;
+            /**
+             * Guild Id
+             * @example 1234567890123456789
+             */
+            guild_id: string;
+            /**
+             * Kicks
+             * @default 0
+             */
+            kicks: number;
+            /** Message Channel Id */
+            message_channel_id?: string | null;
+            /** Message Id */
+            message_id?: string | null;
+        };
         /**
          * GuildLocale
          * @description A guild's locale override, with the guild's ID.
@@ -708,6 +896,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ManagedGuild"][];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    bear_trap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrap"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_bear_trap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BearTrapChannel"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrap"];
                 };
             };
             /** @description The request failed. `code` says why. */
@@ -1233,6 +1505,183 @@ export interface operations {
             };
         };
     };
+    internal_bear_trap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrapState"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    internal_set_bear_trap: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The calling bot instance's ID. Change events from this request carry it, so that instance ignores them. */
+                "X-Fm01-Origin"?: string | null;
+            };
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BearTrapChannel"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrapState"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    internal_add_bear_trap_kick: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The calling bot instance's ID. Change events from this request carry it, so that instance ignores them. */
+                "X-Fm01-Origin"?: string | null;
+            };
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrapKicks"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    internal_set_bear_trap_message: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The calling bot instance's ID. Change events from this request carry it, so that instance ignores them. */
+                "X-Fm01-Origin"?: string | null;
+            };
+            path: {
+                guild_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BearTrapMessage"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BearTrapState"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     internal_locale: {
         parameters: {
             query?: never;
@@ -1385,6 +1834,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Prefix"];
+                };
+            };
+            /** @description The request failed. `code` says why. */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The API or Discord failed. */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    all_bear_traps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuildBearTrap"][];
                 };
             };
             /** @description The request failed. `code` says why. */

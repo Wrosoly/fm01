@@ -52,6 +52,163 @@
         "title": "Balance",
         "type": "object"
       },
+      "BearTrap": {
+        "description": "A guild's bear trap, as a guild manager sees it.",
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "kicks": {
+            "default": 0,
+            "title": "Kicks",
+            "type": "integer"
+          }
+        },
+        "title": "BearTrap",
+        "type": "object"
+      },
+      "BearTrapChannel": {
+        "description": "The channel to set the bear trap in. ``None`` turns the trap off.",
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          }
+        },
+        "title": "BearTrapChannel",
+        "type": "object"
+      },
+      "BearTrapKicks": {
+        "description": "The bear trap's kick count after a kick.",
+        "properties": {
+          "kicks": {
+            "title": "Kicks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kicks"
+        ],
+        "title": "BearTrapKicks",
+        "type": "object"
+      },
+      "BearTrapMessage": {
+        "description": "The trap message the bot posted. ``None`` fields mean there is no message.",
+        "properties": {
+          "message_channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "title": "BearTrapMessage",
+        "type": "object"
+      },
+      "BearTrapState": {
+        "description": "A guild's bear trap with the bot's own bookkeeping.",
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "kicks": {
+            "default": 0,
+            "title": "Kicks",
+            "type": "integer"
+          },
+          "message_channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "title": "BearTrapState",
+        "type": "object"
+      },
       "DashboardUser": {
         "description": "A signed-in user's Discord profile.",
         "properties": {
@@ -124,10 +281,79 @@
           "not_found",
           "insufficient_funds",
           "same_account",
+          "invalid_channel",
           "discord_unavailable"
         ],
         "title": "ErrorCode",
         "type": "string"
+      },
+      "GuildBearTrap": {
+        "description": "A guild's bear trap state, with the guild's ID.",
+        "properties": {
+          "channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel Id"
+          },
+          "guild_id": {
+            "examples": [
+              "1234567890123456789"
+            ],
+            "pattern": "^[0-9]{1,20}$",
+            "title": "Guild Id",
+            "type": "string"
+          },
+          "kicks": {
+            "default": 0,
+            "title": "Kicks",
+            "type": "integer"
+          },
+          "message_channel_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Channel Id"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "examples": [
+                  "1234567890123456789"
+                ],
+                "pattern": "^[0-9]{1,20}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          }
+        },
+        "required": [
+          "guild_id"
+        ],
+        "title": "GuildBearTrap",
+        "type": "object"
       },
       "GuildLocale": {
         "description": "A guild's locale override, with the guild's ID.",
@@ -600,6 +826,140 @@
         "tags": [
           "dashboard",
           "account"
+        ]
+      }
+    },
+    "/dashboard/guilds/{guild_id}/settings/bear-trap": {
+      "get": {
+        "description": "Get a guild's bear trap.",
+        "operationId": "bear_trap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrap"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Bear Trap",
+        "tags": [
+          "dashboard",
+          "bear_trap"
+        ]
+      },
+      "put": {
+        "description": "Set a guild's bear trap channel. A `null` channel turns the trap off.\n\nThe bot posts the trap message in the channel. If it can't, it turns the trap off again.",
+        "operationId": "set_bear_trap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BearTrapChannel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrap"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Bear Trap",
+        "tags": [
+          "dashboard",
+          "bear_trap"
         ]
       }
     },
@@ -1405,6 +1765,330 @@
         ]
       }
     },
+    "/internal/guilds/{guild_id}/settings/bear-trap": {
+      "get": {
+        "description": "Get a guild's bear trap.",
+        "operationId": "internal_bear_trap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrapState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Internal Bear Trap",
+        "tags": [
+          "internal",
+          "bear_trap"
+        ]
+      },
+      "put": {
+        "description": "Set a guild's bear trap channel. A `null` channel turns the trap off.",
+        "operationId": "internal_set_bear_trap",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+            "in": "header",
+            "name": "X-Fm01-Origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+              "title": "X-Fm01-Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BearTrapChannel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrapState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Internal Set Bear Trap",
+        "tags": [
+          "internal",
+          "bear_trap"
+        ]
+      }
+    },
+    "/internal/guilds/{guild_id}/settings/bear-trap/kicks": {
+      "post": {
+        "description": "Count one more member the trap soft-banned.",
+        "operationId": "internal_add_bear_trap_kick",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+            "in": "header",
+            "name": "X-Fm01-Origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+              "title": "X-Fm01-Origin"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrapKicks"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Internal Add Bear Trap Kick",
+        "tags": [
+          "internal",
+          "bear_trap"
+        ]
+      }
+    },
+    "/internal/guilds/{guild_id}/settings/bear-trap/message": {
+      "put": {
+        "description": "Record the trap message the bot posted. `null` fields record that it removed it.",
+        "operationId": "internal_set_bear_trap_message",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "guild_id",
+            "required": true,
+            "schema": {
+              "examples": [
+                "1234567890123456789"
+              ],
+              "pattern": "^[0-9]{1,20}$",
+              "title": "Guild Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+            "in": "header",
+            "name": "X-Fm01-Origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The calling bot instance's ID. Change events from this request carry it, so that instance ignores them.",
+              "title": "X-Fm01-Origin"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BearTrapMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BearTrapState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Internal Set Bear Trap Message",
+        "tags": [
+          "internal",
+          "bear_trap"
+        ]
+      }
+    },
     "/internal/guilds/{guild_id}/settings/locale": {
       "get": {
         "description": "Get a guild's locale override.",
@@ -1706,6 +2390,58 @@
         "tags": [
           "internal",
           "settings"
+        ]
+      }
+    },
+    "/internal/settings/bear-trap": {
+      "get": {
+        "description": "List every guild whose trap is on or still has a message posted.",
+        "operationId": "all_bear_traps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GuildBearTrap"
+                  },
+                  "title": "Response All Bear Traps",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The request failed. `code` says why."
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The API or Discord failed."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "All Bear Traps",
+        "tags": [
+          "internal",
+          "bear_trap"
         ]
       }
     },

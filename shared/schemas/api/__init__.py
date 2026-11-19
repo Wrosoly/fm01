@@ -3,6 +3,15 @@
 TypeScript types are generated from the API's OpenAPI schema into ``shared/schemas/ts/``. Never edit those by hand.
 """
 
+from api.bear_trap import (
+	BEAR_TRAP_SETTING,
+	BearTrap,
+	BearTrapChannel,
+	BearTrapKicks,
+	BearTrapMessage,
+	BearTrapState,
+	GuildBearTrap,
+)
 from api.dashboard import DashboardUser, ManagedGuild, SessionExchange, SessionGrant
 from api.economy import (
 	AddMoneyRequest,
@@ -29,6 +38,7 @@ from api.settings import (
 from api.snowflake import Snowflake
 
 __all__ = (
+	"BEAR_TRAP_SETTING",
 	"EVENTS_CHANNEL",
 	"INVALIDATE_SETTING",
 	"LOCALE_SETTING",
@@ -36,9 +46,15 @@ __all__ = (
 	"AddMoneyRequest",
 	"Amount",
 	"Balance",
+	"BearTrap",
+	"BearTrapChannel",
+	"BearTrapKicks",
+	"BearTrapMessage",
+	"BearTrapState",
 	"DashboardUser",
 	"ErrorBody",
 	"ErrorCode",
+	"GuildBearTrap",
 	"GuildLocale",
 	"GuildPrefix",
 	"InvalidateSetting",

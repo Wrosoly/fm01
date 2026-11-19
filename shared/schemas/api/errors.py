@@ -20,6 +20,8 @@ class ErrorCode(StrEnum):
 	"""The wallet doesn't hold enough money for the Ledger operation."""
 	SAME_ACCOUNT = "same_account"
 	"""A Ledger transfer from a member to themselves."""
+	INVALID_CHANNEL = "invalid_channel"
+	"""The channel doesn't exist in the guild or isn't the kind of channel the setting needs."""
 	DISCORD_UNAVAILABLE = "discord_unavailable"
 	"""Discord's API failed or rate limited a request the API made on the caller's behalf."""
 

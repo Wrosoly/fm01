@@ -17,6 +17,7 @@ _STATUS: dict[ErrorCode, int] = {
 	ErrorCode.NOT_FOUND: 404,
 	ErrorCode.INSUFFICIENT_FUNDS: 409,
 	ErrorCode.SAME_ACCOUNT: 422,
+	ErrorCode.INVALID_CHANNEL: 422,
 	ErrorCode.DISCORD_UNAVAILABLE: 502,
 }
 

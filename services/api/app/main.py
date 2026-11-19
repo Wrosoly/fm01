@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI
 
 from app.auth import require_internal
+from app.bear_trap import routes as bear_trap_routes
 from app.config import Settings
 from app.dashboard import routes as dashboard_routes
 from app.economy import routes as economy_routes
@@ -71,10 +72,12 @@ def create_app(config: Settings | None = None, state_factory: StateFactory = bui
 	internal = APIRouter(prefix="/internal", dependencies=[Depends(require_internal)])
 	internal.include_router(economy_routes.internal)
 	internal.include_router(settings_routes.internal)
+	internal.include_router(bear_trap_routes.internal)
 
 	dashboard = APIRouter(prefix="/dashboard")
 	dashboard.include_router(dashboard_routes.router)
 	dashboard.include_router(settings_routes.dashboard)
+	dashboard.include_router(bear_trap_routes.dashboard)
 
 	app.include_router(internal, tags=["internal"])
 	app.include_router(dashboard, tags=["dashboard"])
