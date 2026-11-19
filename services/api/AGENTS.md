@@ -48,7 +48,7 @@ tests/                # One file per area; conftest.py has the database, fake Re
 
 ## 5. Verification
 
-Run in `services/api/`, in order; all must pass:
+Run in `services/api/`, in order; all must pass (`just check` runs the first four, for the API and the bot):
 
 ```bash
 uv run ruff format --check .

@@ -16,7 +16,7 @@ This document defines architectural standards, technical conventions, and operat
   - Linter & Formatter: `ruff` (indent: tabs `\t`, line-length: 120, quotes: double `"`)
   - Type Checker: `ty` (`uv run ty check`)
   - Test Suite: `pytest` with `pytest-asyncio` (`uv run pytest`)
-- **Task Runner**: `just` (see `justfile`)
+- **Task Runner**: `just` (see the `justfile` in the repo root; it works from any directory)
 
 ---
 
@@ -34,7 +34,6 @@ This document defines architectural standards, technical conventions, and operat
 ├── localization/         # User-facing message templates (JSON format)
 ├── slash_localization/   # Slash command metadata (command names, param descriptions)
 ├── tests/                # Automated pytest test suites and mocking fixtures
-├── justfile              # Automation recipes for development, linting, and testing
 ├── pyproject.toml        # Project dependencies, tool settings, and metadata
 └── main.py               # Bot entry point and runtime initializer
 ```
@@ -146,7 +145,7 @@ Dataclasses decorated with `@dataclass(slots=True)` that wrap Discord objects (e
 
 ## 4. Mandatory Verification Pipeline
 
-Before completing any task, running checks is mandatory. Execute the following commands in order:
+Before completing any task, running checks is mandatory. Execute the following commands in order (`just check` runs all four, for the API and the bot):
 
 ```bash
 # 1. Check code formatting (must produce zero diffs)
