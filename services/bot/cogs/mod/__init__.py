@@ -28,6 +28,7 @@ from discord import app_commands
 from discord.ext import commands, localization
 from helpers import custom_response, seconds_to_text, text_to_seconds
 from helpers.pagination import PaginationView
+from helpers.permissions import require_channel_permissions
 from helpers.regex import URL_REGEX
 
 __all__ = (
@@ -331,6 +332,7 @@ class Moderation(commands.GroupCog, name="Moderation", group_name="mod"):
 		target_channel = channel or (ctx.channel if isinstance(ctx.channel, discord.TextChannel) else None)
 		if not target_channel:
 			raise commands.BadArgument("Channel is not a text channel")
+		require_channel_permissions(ctx.author, target_channel, "manage_channels")
 		if not duration:
 			await ctx.send("mod.slowmode.current_slowmode", channel=TextChannel.from_channel(target_channel))
 			return

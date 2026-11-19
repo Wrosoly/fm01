@@ -357,6 +357,7 @@ class Shop(commands.Cog, name="Shop"):
 
 	@shop.command()
 	@app_commands.checks.has_permissions(manage_guild=True)
+	@commands.has_permissions(manage_guild=True)
 	async def remove_item(self, ctx: Context, item_name: str):
 		assert ctx.guild is not None
 		assert isinstance(ctx.author, discord.Member)

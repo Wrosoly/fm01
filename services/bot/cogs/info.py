@@ -1,4 +1,5 @@
 import re
+from typing import Any
 
 import discord
 from args import Bot as BotArg
@@ -34,23 +35,29 @@ class Info(commands.Cog, name="Information"):
 		argument: discord.User | discord.abc.GuildChannel | discord.Role | discord.Emoji | discord.PartialEmoji,
 	):
 		if isinstance(argument, discord.User):
-			if cmd := self.info.get_command("user"):
-				await ctx.invoke(cmd, argument)
-		elif isinstance(argument, discord.abc.GuildChannel):
-			if cmd := self.info.get_command("channel"):
-				await ctx.invoke(cmd, argument)
-		elif isinstance(argument, discord.Role):
-			if cmd := self.info.get_command("role"):
-				await ctx.invoke(cmd, argument)
+			await self._invoke(ctx, "user", argument)
+		elif isinstance(argument, (discord.abc.GuildChannel, discord.Role)):
+			# Outside a guild the converters search every guild the bot is in.
+			if argument.guild != ctx.guild:
+				raise commands.BadArgument
+			await self._invoke(ctx, "channel" if isinstance(argument, discord.abc.GuildChannel) else "role", argument)
 		elif isinstance(argument, (discord.Emoji, discord.PartialEmoji)):
-			if cmd := self.info.get_command("emoji"):
-				await ctx.invoke(cmd, argument)
+			await self._invoke(ctx, "emoji", argument)
 		else:
 			raise commands.BadArgument
+
+	async def _invoke(self, ctx: Context, name: str, argument: Any) -> None:
+		"""Run an ``info`` subcommand with its checks, which ``ctx.invoke`` skips."""
+		if cmd := self.info.get_command(name):
+			await cmd.can_run(ctx)
+			await ctx.invoke(cmd, argument)
 
 	@info.command(l10n_key="userinfo", full_aliases=["ui", "userinfo", "user", "memberinfo", "member", "infomember"])
 	async def user(self, ctx: Context, user: discord.Member | discord.User | None = None):
 		user = user or ctx.author
+		if isinstance(user, discord.Member) and user.guild != ctx.guild:
+			# Outside a guild the converter finds members of any guild; show only what's public.
+			user = self.client.get_user(user.id) or await self.client.fetch_user(user.id)
 
 		if not ctx.guild and type(user) is discord.User:
 			await ctx.send("info.user.not_member", member=User.from_user(user))
