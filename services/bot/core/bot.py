@@ -477,6 +477,8 @@ class Bot(commands.AutoShardedBot):
 			case commands.CommandOnCooldown():
 				retry_after = seconds_to_text(int(error.retry_after))
 				await ctx.send("errors.command_on_cooldown", command=command, retry_after=retry_after)
+			case commands.MaxConcurrencyReached():
+				await ctx.send("errors.max_concurrency", command=command)
 			case commands.ChannelNotFound():
 				await ctx.send("errors.channel_not_found", command=command)
 			case commands.EmojiNotFound():

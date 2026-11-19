@@ -367,6 +367,14 @@
         }
       ]
     },
+    "max_concurrency": {
+      "embeds": [
+        {
+          "description": "Too many people are using this command right now. Try again in a moment.",
+          "title": "Busy"
+        }
+      ]
+    },
     "member_not_found": {
       "embeds": [
         {
