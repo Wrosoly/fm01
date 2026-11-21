@@ -5,8 +5,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   pageExtensions: ['mdx', 'ts', 'tsx'],
   experimental: {
-    // React <ViewTransition> support (animated page/language switches).
-    viewTransition: true,
+    agentUpgrade: "security",
   },
   allowedDevOrigins: ['100.118.108.3', 'fm01bot.gamrtag.xyz'],
   images: {
